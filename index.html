@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The AI Trilemma</title>
+<style>
+:root{--bg:#14181D;--pn:#1B2026;--ln:#2C333B;--ink:#F2F1EC;--dim:#9CA3AC}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,sans-serif}
+.wrap{max-width:520px;margin:0 auto;padding:24px 18px}.wide{max-width:1200px}
+h1,h2{margin:.2em 0}p{color:var(--dim)}b{color:var(--ink)}
+input,textarea{width:100%;padding:12px;border-radius:10px;border:1px solid var(--ln);background:var(--pn);color:var(--ink);font:inherit;margin:6px 0}
+button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--ln);background:#262d35;color:var(--ink);padding:9px 14px}
+button.go{background:var(--ink);color:#14181D;font-weight:600;width:100%;padding:13px;margin-top:6px}
+.pk{display:grid;gap:12px;margin-top:14px}.pk button{padding:22px;font-size:20px;font-weight:700;border:2px solid var(--c);background:transparent}
+.pk button.on{background:var(--c);color:#111}
+.err{color:#e07a7a;min-height:1.2em;margin:0}li{margin:6px 0}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.bar>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tabs button.on{background:var(--ink);color:#111}
+.qr{background:#fff;padding:12px;border-radius:12px;width:max-content;margin:0 auto 16px}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.col{border:2px solid var(--c);border-radius:16px;overflow:hidden;background:var(--pn);display:flex;flex-direction:column;min-height:62vh}
+.col h3{margin:0;padding:12px;background:var(--c);color:#111;text-align:center;font-size:22px}
+.sec{padding:14px;border-bottom:1px solid var(--ln)}.sec small{color:var(--dim)}
+.mid{flex:1;font-size:18px}.mid ul{margin:0;padding-left:20px}
+.num{font-size:44px;font-weight:700;line-height:1.1}.d{font-size:18px;margin-left:10px}.up{color:#3FA66B}.dn{color:#e07a7a}
+.mv{margin-top:14px;padding:14px;border:1px solid var(--ln);border-radius:12px;font-size:18px}
+</style></head><body><div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getFirestore,doc,setDoc,getDoc,updateDoc,onSnapshot,collection,addDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ▼▼ PASTE YOUR FIREBASE CONFIG HERE ▼▼
+const CONFIG={apiKey:"AIzaSyASMLP6fIP2U4COqCR_AYJHmBe19DhVuqc",authDomain:"oyw---ai-trilemma-workshop.firebaseapp.com",projectId:"oyw---ai-trilemma-workshop",storageBucket:"oyw---ai-trilemma-workshop.firebasestorage.app",messagingSenderId:"380446389895",appId:"1:380446389895:web:6d1d97f281a14602c42a22"};
+// ▲▲ ------------------------------ ▲▲
+
+const db=getFirestore(initializeApp(CONFIG)),sref=c=>doc(db,'sessions',c);
+const $=s=>document.querySelector(s),app=$('#app');
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const P=[{id:'profit',n:'Profit',c:'#E0A526'},{id:'people',n:'People',c:'#3FA66B'},{id:'planet',n:'Planet',c:'#3E8FD0'}];
+const pn=id=>P.find(p=>p.id===id);
+const DEF=`The Hospital AI Rollout | An AI diagnostic tool cuts wait times 30% but can miss rare cases, and the money could hire more frontline staff.
+The AI Customer Service Agent | AI handles 80% of enquiries, but 3,000 service jobs disappear over two years.
+The Flood Prediction Dilemma | An AI could save thousands of lives, but its data centre carries a heavy environmental and funding cost.`;
+const MINS={lobby:0,ground:10,pick:1,discuss:7,reselect:2,final:5,results:5};
+const steps=n=>{const a=[{k:'lobby'},{k:'ground'}];for(let i=0;i<n;i++)a.push({k:'pick',i},{k:'discuss',i},{k:'reselect',i});a.push({k:'final'},{k:'results'});return a};
+const lab=s=>({lobby:'Lobby',ground:'Ground 0',pick:`S${s.i+1} · Pick`,discuss:`S${s.i+1} · Debate`,reselect:`S${s.i+1} · Reselect`,final:'Last Stand',results:'Results'})[s.k];
+const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+
+const host=location.hash==='#host';
+const pid=localStorage.pid||(localStorage.pid=Math.random().toString(36).slice(2,10));
+let S=null,code=null,players=[],points=[],me={},loaded=false,tab=null,hide=false,timerEnd=0,lastStep=-1;const mine={};
+const cur=()=>steps(S.scenarios.length)[S.step];
+
+function listen(c){
+  code=c;loaded=false;
+  onSnapshot(sref(c),d=>{S=d.exists()?d.data():null;loaded=true;draw()});
+  if(host){
+    onSnapshot(collection(db,'sessions',c,'players'),q=>{players=q.docs.map(d=>d.data());draw()});
+    onSnapshot(collection(db,'sessions',c,'points'),q=>{points=q.docs.map(d=>d.data()).sort((a,b)=>a.at-b.at);draw()});
+  }else onSnapshot(doc(db,'sessions',c,'players',pid),d=>{me=d.data()||{};draw()});
+}
+const draw=()=>host?drawHost():drawPlayer();
+
+/* ---------- PARTICIPANT ---------- */
+const picker=k=>`<div class="pk">${P.map(p=>`<button data-set="${k}:${p.id}" class="${me[k]===p.id?'on':''}" style="--c:${p.c}">${p.n}</button>`).join('')}</div>`;
+function drawPlayer(){
+  const W=h=>app.innerHTML=`<div class="wrap">${h}</div>`;
+  if(!code)return W(`<h1>Join the session</h1><input id="cd" placeholder="Session code" maxlength="4" autocapitalize="characters"><button class="go" data-a="join">Join</button>`);
+  if(!loaded)return W('<p>Connecting…</p>');
+  if(!S)return W('<h1>Session not found</h1><p>Check the code and try again.</p>');
+  const st=cur(),sc=S.scenarios[st.i]||{},i=st.i;let b='';
+  if(st.k==='lobby')b="<h1>You're in ✓</h1><p>Waiting for the facilitator to start…</p>";
+  if(st.k==='ground')b=`<h2>Ground 0</h2><p>No scenario yet. Off the top of your head, what do you stand for?</p>${picker('g')}`;
+  if(st.k==='pick')b=`<h2>${esc(sc.name)}</h2><p>${esc(sc.blurb)}</p><p><b>Where do you stand on this?</b></p>${picker('o'+i)}`;
+  if(st.k==='discuss'){
+    const o=me['o'+i],my=mine[i]||[];
+    b=`<h2>${esc(sc.name)}</h2>`+(o?`<p>You're arguing for <b style="color:${pn(o).c}">${pn(o).n}</b>. Add as many points as you like, max 5 words each.</p><input id="pt" placeholder="e.g. Saves lives, costs jobs" autocomplete="off"><button class="go" data-a="add">Add point</button><p class="err" id="err"></p><ul>${my.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:`<p>Pick a side first.</p>${picker('o'+i)}`);
+  }
+  if(st.k==='reselect')b=`<h2>${esc(sc.name)}</h2><p>You started at <b>${me['o'+i]?pn(me['o'+i]).n:'—'}</b>. After the debate, where do you stand now?</p>${picker('r'+i)}`;
+  if(st.k==='final')b=`<h2>Last stand</h2><p>Your Ground 0 was <b>${me.g?pn(me.g).n:'—'}</b>. Where do you stand now?</p>${picker('f')}`;
+  if(st.k==='results')b=`<h1>Thank you 🙌</h1><p>Ground 0: <b>${me.g?pn(me.g).n:'—'}</b> → Last stand: <b>${me.f?pn(me.f).n:'—'}</b></p><p>Look at the big screen for the room's result.</p>`;
+  W(b);
+}
+
+/* ---------- HOST ---------- */
+const box=(l,n,base)=>`<div class="sec"><small>${l}</small><div class="num">${n}${base!=null&&n!==base?`<span class="d ${n>base?'up':'dn'}">${n>base?'▲':'▼'}${Math.abs(n-base)}</span>`:''}</div></div>`;
+function hostSetup(){
+  app.innerHTML=`<div class="wrap"><h1>Facilitator</h1><p>Create a session</p><input id="pin" placeholder="Choose a host PIN"><textarea id="sc" rows="8">${DEF}</textarea><p>One scenario per line: Name | short description</p><button class="go" data-a="create">Create session</button><hr style="border-color:#2C333B;margin:26px 0"><p>Resume a session</p><input id="rc" placeholder="Code" value="${localStorage.hostCode||''}"><input id="rp" placeholder="PIN"><button class="go" data-a="resume">Resume</button></div>`;
+}
+function drawHost(){
+  if(!code)return hostSetup();
+  if(!loaded){app.innerHTML='<div class="wrap"><p>Connecting…</p></div>';return}
+  if(!S){code=null;return hostSetup()}
+  if(S.step!==lastStep){lastStep=S.step;tab=null;const m=MINS[cur().k];timerEnd=m?Date.now()+m*60000:0}
+  const sts=steps(S.scenarios.length),c=cur(),n=S.scenarios.length;
+  const auto=c.k==='lobby'||c.k==='ground'?'g':c.k==='final'||c.k==='results'?'f':'s'+c.i,v=tab||auto;
+  const key={ground:'g',pick:'o'+c.i,reselect:'r'+c.i,final:'f'}[c.k];
+  const ans=key?` · ${players.filter(x=>x[key]).length}/${players.length} answered`:'';
+  const tabs=[['g','Ground 0'],...S.scenarios.map((s,i)=>['s'+i,'S'+(i+1)]),['f','Last Stand']];
+  const cnt=(k,id)=>players.filter(x=>x[k]===id).length;
+  const cols=P.map(p=>{let top,mid='',bot='';
+    if(v==='g')top=box('Ground 0',cnt('g',p.id));
+    else if(v==='f'){top=box('Ground 0',cnt('g',p.id));bot=box('Last stand',cnt('f',p.id),cnt('g',p.id))}
+    else{const i=+v.slice(1);top=box('Opening pick',cnt('o'+i,p.id));
+      mid=`<ul>${points.filter(x=>x.s===i&&x.p===p.id).map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul>`;
+      bot=box('After reselect',cnt('r'+i,p.id),cnt('o'+i,p.id))}
+    return `<div class="col" style="--c:${p.c}"><h3>${p.n}</h3>${top}<div class="sec mid">${mid}</div>${bot}</div>`}).join('');
+  let mv='';
+  if(v==='f'){const both=players.filter(x=>x.g&&x.f),ch=both.filter(x=>x.g!==x.f),fl={};
+    ch.forEach(x=>{const k=pn(x.g).n+' → '+pn(x.f).n;fl[k]=(fl[k]||0)+1});
+    mv=`<div class="mv"><b>${ch.length} of ${both.length}</b> changed their stance since Ground 0.<br>${Object.entries(fl).map(([k,q])=>`${k}: ${q}`).join(' · ')}</div>`}
+  const scn=c.k==='pick'||c.k==='discuss'||c.k==='reselect'?`<h2>${esc(S.scenarios[c.i].name)}</h2><p>${esc(S.scenarios[c.i].blurb)}</p>`:'';
+  app.innerHTML=`<div class="wrap wide">${hide?'<button data-a="hide" style="float:right">Controls</button>':`<div class="bar"><div><b>Code ${code}</b><span>· ${esc(location.host+location.pathname)}?s=${code}</span><span>· ${players.length} joined</span></div>
+   <div><b>${lab(c)}</b><span>${ans}</span><b id="tm"></b><button data-a="prev">‹ Back</button><button data-a="next">Next ›</button><button data-a="hide">Hide</button></div></div>
+   <div class="bar tabs"><div>${tabs.map(([k,l])=>`<button data-tab="${k}" class="${v===k?'on':''}">${l}</button>`).join('')}</div></div>`}
+   ${c.k==='lobby'?'<div class="qr" id="qr"></div>':''}${scn}<div class="cols">${cols}</div>${mv}</div>`;
+  if(c.k==='lobby'&&window.QRCode)new QRCode($('#qr'),{text:location.origin+location.pathname+'?s='+code,width:220,height:220});
+}
+setInterval(()=>{const e=$('#tm');if(!e)return;if(!timerEnd){e.textContent='';return}const s=Math.max(0,Math.round((timerEnd-Date.now())/1000));e.textContent='⏱ '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0')},1000);
+
+/* ---------- EVENTS ---------- */
+app.addEventListener('click',async e=>{
+  const t=e.target.closest('button');if(!t)return;
+  if(t.dataset.set){const[k,v]=t.dataset.set.split(':');me[k]=v;setDoc(doc(db,'sessions',code,'players',pid),{[k]:v},{merge:true});return draw()}
+  if(t.dataset.tab){tab=t.dataset.tab;return draw()}
+  const a=t.dataset.a;
+  if(a==='join'){const c=$('#cd').value.trim().toUpperCase();if(c)listen(c)}
+  if(a==='add'){const x=$('#pt').value.trim().replace(/\s+/g,' ');
+    if(!x||x.split(' ').length>5||x.length>60){$('#err').textContent='Keep it to 5 words or fewer.';return}
+    const i=cur().i;addDoc(collection(db,'sessions',code,'points'),{s:i,p:me['o'+i],t:x,pid,at:Date.now()});(mine[i]=mine[i]||[]).push(x);draw()}
+  if(a==='hide'){hide=!hide;draw()}
+  if(a==='next'&&S.step<steps(S.scenarios.length).length-1)updateDoc(sref(code),{step:S.step+1});
+  if(a==='prev'&&S.step>0)updateDoc(sref(code),{step:S.step-1});
+  if(a==='create'){const pin=$('#pin').value.trim();if(pin.length<3)return alert('Choose a PIN (3+ characters)');
+    const sc=$('#sc').value.split('\n').map(l=>l.split('|')).filter(x=>x[0].trim()).map(x=>({name:x[0].trim(),blurb:(x[1]||'').trim()}));
+    const c=Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ'[Math.random()*23|0]).join('');
+    await setDoc(sref(c),{step:0,scenarios:sc,pin:await sha(pin),created:Date.now()});localStorage.hostCode=c;listen(c)}
+  if(a==='resume'){const c=$('#rc').value.trim().toUpperCase(),d=await getDoc(sref(c));
+    if(!d.exists()||d.data().pin!==await sha($('#rp').value.trim()))return alert('Code or PIN not recognised');
+    localStorage.hostCode=c;listen(c)}
+});
+
+const q=new URLSearchParams(location.search).get('s');
+if(q&&!host)listen(q.toUpperCase());else draw();
+</script></body></html>
