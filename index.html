@@ -27,7 +27,7 @@ button.go{background:var(--ink);color:#14181D;font-weight:600;width:100%;padding
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,doc,setDoc,getDoc,updateDoc,onSnapshot,collection,addDoc} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,doc,setDoc,getDoc,updateDoc,deleteDoc,onSnapshot,collection,addDoc,getDocs} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ▼▼ PASTE YOUR FIREBASE CONFIG HERE ▼▼
 const CONFIG={apiKey:"AIzaSyASMLP6fIP2U4COqCR_AYJHmBe19DhVuqc",authDomain:"oyw---ai-trilemma-workshop.firebaseapp.com",projectId:"oyw---ai-trilemma-workshop",storageBucket:"oyw---ai-trilemma-workshop.firebasestorage.app",messagingSenderId:"380446389895",appId:"1:380446389895:web:6d1d97f281a14602c42a22"};
@@ -68,6 +68,7 @@ function drawPlayer(){
   if(!code)return W(`<h1>Join the session</h1><input id="cd" placeholder="Session code" maxlength="4" autocapitalize="characters"><button class="go" data-a="join">Join</button>`);
   if(!loaded)return W('<p>Connecting…</p>');
   if(!S)return W('<h1>Session not found</h1><p>Check the code and try again.</p>');
+  if(S.ended)return W("<h1>Session ended 🙌</h1><p>Thanks for taking part — look at the big screen for the room's results.</p>");
   const st=cur(),sc=S.scenarios[st.i]||{},i=st.i;let b='';
   if(st.k==='lobby')b="<h1>You're in ✓</h1><p>Waiting for the facilitator to start…</p>";
   if(st.k==='ground')b=`<h2>Ground 0</h2><p>No scenario yet. Off the top of your head, what do you stand for?</p>${picker('g')}`;
@@ -110,10 +111,11 @@ function drawHost(){
     ch.forEach(x=>{const k=pn(x.g).n+' → '+pn(x.f).n;fl[k]=(fl[k]||0)+1});
     mv=`<div class="mv"><b>${ch.length} of ${both.length}</b> changed their stance since Ground 0.<br>${Object.entries(fl).map(([k,q])=>`${k}: ${q}`).join(' · ')}</div>`}
   const scn=c.k==='pick'||c.k==='discuss'||c.k==='reselect'?`<h2>${esc(S.scenarios[c.i].name)}</h2><p>${esc(S.scenarios[c.i].blurb)}</p>`:'';
+  const endedBanner=S.ended?'<div class="mv" style="border-color:#e07a7a;margin-bottom:14px">This session has ended — participants see a thank-you screen. You can still browse results below, reopen it, or reset it for a fresh test.</div>':'';
   app.innerHTML=`<div class="wrap wide">${hide?'<button data-a="hide" style="float:right">Controls</button>':`<div class="bar"><div><b>Code ${code}</b><span>· ${esc(location.host+location.pathname)}?s=${code}</span><span>· ${players.length} joined</span></div>
-   <div><b>${lab(c)}</b><span>${ans}</span><b id="tm"></b><button data-a="prev">‹ Back</button><button data-a="next">Next ›</button><button data-a="hide">Hide</button></div></div>
+   <div><b>${lab(c)}</b><span>${ans}</span><b id="tm"></b><button data-a="prev">‹ Back</button><button data-a="next">Next ›</button><button data-a="hide">Hide</button><button data-a="reset">↺ Reset</button><button data-a="end">${S.ended?'Reopen':'⏹ End'}</button></div></div>
    <div class="bar tabs"><div>${tabs.map(([k,l])=>`<button data-tab="${k}" class="${v===k?'on':''}">${l}</button>`).join('')}</div></div>`}
-   ${c.k==='lobby'?'<div class="qr" id="qr"></div>':''}${scn}<div class="cols">${cols}</div>${mv}</div>`;
+   ${endedBanner}${c.k==='lobby'?'<div class="qr" id="qr"></div>':''}${scn}<div class="cols">${cols}</div>${mv}</div>`;
   if(c.k==='lobby'&&window.QRCode)new QRCode($('#qr'),{text:location.origin+location.pathname+'?s='+code,width:220,height:220});
 }
 setInterval(()=>{const e=$('#tm');if(!e)return;if(!timerEnd){e.textContent='';return}const s=Math.max(0,Math.round((timerEnd-Date.now())/1000));e.textContent='⏱ '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0')},1000);
@@ -129,12 +131,23 @@ app.addEventListener('click',async e=>{
     if(!x||x.split(' ').length>5||x.length>60){$('#err').textContent='Keep it to 5 words or fewer.';return}
     const i=cur().i;addDoc(collection(db,'sessions',code,'points'),{s:i,p:me['o'+i],t:x,pid,at:Date.now()});(mine[i]=mine[i]||[]).push(x);draw()}
   if(a==='hide'){hide=!hide;draw()}
+  if(a==='end'){
+    if(S.ended){updateDoc(sref(code),{ended:false});return}
+    if(confirm('End this session for everyone now? Participants will see a thank-you screen. All answers and points stay saved so you can keep reviewing the results.'))updateDoc(sref(code),{ended:true});
+  }
+  if(a==='reset'){
+    if(!confirm('Clear all answers and points and restart from Ground 0? The same code and PIN keep working — this is meant for re-running tests.'))return;
+    t.disabled=true;
+    const[pd,xd]=await Promise.all([getDocs(collection(db,'sessions',code,'players')),getDocs(collection(db,'sessions',code,'points'))]);
+    await Promise.all([...pd.docs,...xd.docs].map(d=>deleteDoc(d.ref)));
+    await updateDoc(sref(code),{step:0,ended:false});
+  }
   if(a==='next'&&S.step<steps(S.scenarios.length).length-1)updateDoc(sref(code),{step:S.step+1});
   if(a==='prev'&&S.step>0)updateDoc(sref(code),{step:S.step-1});
   if(a==='create'){const pin=$('#pin').value.trim();if(pin.length<3)return alert('Choose a PIN (3+ characters)');
     const sc=$('#sc').value.split('\n').map(l=>l.split('|')).filter(x=>x[0].trim()).map(x=>({name:x[0].trim(),blurb:(x[1]||'').trim()}));
     const c=Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ'[Math.random()*23|0]).join('');
-    await setDoc(sref(c),{step:0,scenarios:sc,pin:await sha(pin),created:Date.now()});localStorage.hostCode=c;listen(c)}
+    await setDoc(sref(c),{step:0,ended:false,scenarios:sc,pin:await sha(pin),created:Date.now()});localStorage.hostCode=c;listen(c)}
   if(a==='resume'){const c=$('#rc').value.trim().toUpperCase(),d=await getDoc(sref(c));
     if(!d.exists()||d.data().pin!==await sha($('#rp').value.trim()))return alert('Code or PIN not recognised');
     localStorage.hostCode=c;listen(c)}
