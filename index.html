@@ -11,45 +11,74 @@ input,textarea{width:100%;padding:12px;border-radius:10px;border:1px solid var(-
 button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--ln);background:#262d35;color:var(--ink);padding:9px 14px}
 button.go{background:var(--ink);color:#14181D;font-weight:600;width:100%;padding:13px;margin-top:6px}
 .pk{display:grid;gap:12px;margin-top:14px}.pk button{padding:22px;font-size:20px;font-weight:700;border:2px solid var(--c);background:transparent}
-.pk button.on{background:var(--c);color:#111}
+.pk button.on{background:var(--c);color:var(--fg)}
 .err{color:#e07a7a;min-height:1.2em;margin:0}li{margin:6px 0}
+.jl{color:var(--dim);font-size:13px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em}
 .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
 .bar>div{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tabs button.on{background:var(--ink);color:#111}
+.jn{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.jn span{font-size:13px;padding:5px 10px;border-radius:999px;border:1px solid var(--ln);color:var(--dim)}
+.jn span.on{background:var(--ink);color:#111;border-color:var(--ink);font-weight:600}
 .qr{background:#fff;padding:12px;border-radius:12px;width:max-content;margin:0 auto 16px}
 .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 .col{border:2px solid var(--c);border-radius:16px;overflow:hidden;background:var(--pn);display:flex;flex-direction:column;min-height:62vh}
-.col h3{margin:0;padding:12px;background:var(--c);color:#111;text-align:center;font-size:22px}
+.col h3{margin:0;padding:12px;background:var(--c);color:var(--fg);text-align:center;font-size:22px}
 .sec{padding:14px;border-bottom:1px solid var(--ln)}.sec small{color:var(--dim)}
 .mid{flex:1;font-size:18px}.mid ul{margin:0;padding-left:20px}
-.num{font-size:44px;font-weight:700;line-height:1.1}.d{font-size:18px;margin-left:10px}.up{color:#3FA66B}.dn{color:#e07a7a}
+.num{font-size:44px;font-weight:700;line-height:1.1}.d{font-size:18px;margin-left:10px;color:var(--ink)}
 .mv{margin-top:14px;padding:14px;border:1px solid var(--ln);border-radius:12px;font-size:18px}
+.vcards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:10px}
+.vc{border:2px solid var(--ink);border-radius:16px;padding:20px;background:var(--pn);cursor:pointer;text-align:center}
+.vc.out{opacity:.4;border-style:dashed}.vc h3{margin:0 0 8px;font-size:22px}.vc small{color:var(--dim)}
+.tag{margin-top:10px;font-weight:700;letter-spacing:.05em;font-size:13px}
+.tr{display:grid;grid-template-columns:240px 1fr;gap:12px;align-items:center;margin:8px 0}.tl{font-size:15px}
+.sb{display:flex;height:36px;border-radius:8px;overflow:hidden;background:var(--pn)}
+.sb span{display:flex;align-items:center;justify-content:center;font-weight:700;overflow:hidden}
+.lg{display:flex;gap:16px;margin:10px 0;font-size:14px;color:var(--dim)}
+.lg i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px}
+@media(max-width:760px){.cols,.vcards{grid-template-columns:1fr}.tr{grid-template-columns:1fr}}
 </style></head><body><div id="app"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,doc,setDoc,getDoc,updateDoc,deleteDoc,onSnapshot,collection,addDoc,getDocs} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,doc,setDoc,getDoc,updateDoc,deleteDoc,deleteField,onSnapshot,collection,addDoc,getDocs,query,where} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// ▼▼ PASTE YOUR FIREBASE CONFIG HERE ▼▼
 const CONFIG={apiKey:"AIzaSyASMLP6fIP2U4COqCR_AYJHmBe19DhVuqc",authDomain:"oyw---ai-trilemma-workshop.firebaseapp.com",projectId:"oyw---ai-trilemma-workshop",storageBucket:"oyw---ai-trilemma-workshop.firebasestorage.app",messagingSenderId:"380446389895",appId:"1:380446389895:web:6d1d97f281a14602c42a22"};
-// ▲▲ ------------------------------ ▲▲
 
 const db=getFirestore(initializeApp(CONFIG)),sref=c=>doc(db,'sessions',c);
 const $=s=>document.querySelector(s),app=$('#app');
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const P=[{id:'profit',n:'Profit',c:'#E0A526'},{id:'people',n:'People',c:'#3FA66B'},{id:'planet',n:'Planet',c:'#3E8FD0'}];
+const P=[{id:'profit',n:'Profit',c:'#F5C518',fg:'#111'},{id:'people',n:'People',c:'#E5484D',fg:'#fff'},{id:'planet',n:'Planet',c:'#3FA66B',fg:'#fff'}];
 const pn=id=>P.find(p=>p.id===id);
-const DEF=`The Hospital AI Rollout | An AI diagnostic tool cuts wait times 30% but can miss rare cases, and the money could hire more frontline staff.
-The AI Customer Service Agent | AI handles 80% of enquiries, but 3,000 service jobs disappear over two years.
-The Flood Prediction Dilemma | An AI could save thousands of lives, but its data centre carries a heavy environmental and funding cost.`;
-const MINS={lobby:0,ground:10,pick:1,discuss:7,reselect:2,final:5,results:5};
-const steps=n=>{const a=[{k:'lobby'},{k:'ground'}];for(let i=0;i<n;i++)a.push({k:'pick',i},{k:'discuss',i},{k:'reselect',i});a.push({k:'final'},{k:'results'});return a};
-const lab=s=>({lobby:'Lobby',ground:'Ground 0',pick:`S${s.i+1} · Pick`,discuss:`S${s.i+1} · Debate`,reselect:`S${s.i+1} · Reselect`,final:'Last Stand',results:'Results'})[s.k];
+// Wording used across the screens. Change it here to rename it everywhere.
+const T={g:'First Instinct',f:'Final Stance',b:'Before discussion',a:'After discussion',pt:'talking point'};
+const JN=['Choose a priority','Set the scene','Assess your priority','Test and challenge','Reconsider your priority','Conclusion'];
+const JMAP={lobby:[],ground:[1],vote:[2],pick:[2,3],internal:[4],external:[4],reselect:[5],final:[6],results:[6]};
+const DEF=`The hospital AI roll-out | Faster diagnoses and shorter waits, versus missed rare cases and fewer frontline staff.
+The Green Data Centre Dilemma | Expand fast with a conventional data centre, or go sustainable at higher cost and a slower start.
+The National Energy Crisis | Keep expanding AI infrastructure, or limit it to protect the energy grid.`;
+// minutes per stage (host timer). Introduction 9 = ground 7 + vote 2 · each scenario 18 = 2+4+11+1 · Conclusion 5 = final 2 + debrief 3 · total 50
+const MINS={lobby:0,ground:7,vote:2,pick:2,internal:4,external:11,reselect:1,final:2,results:3};
+const STEPS=[{k:'lobby'},{k:'ground'},{k:'vote'}];
+[0,1].forEach(n=>STEPS.push({k:'pick',n},{k:'internal',n},{k:'external',n},{k:'reselect',n}));
+STEPS.push({k:'final'},{k:'results'});
 const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 
 const host=location.hash==='#host';
 const pid=localStorage.pid||(localStorage.pid=Math.random().toString(36).slice(2,10));
-let S=null,code=null,players=[],points=[],me={},loaded=false,tab=null,hide=false,timerEnd=0,lastStep=-1;const mine={};
-const cur=()=>steps(S.scenarios.length)[S.step];
+let S=null,code=null,players=[],points=[],me={},mineAll=[],loaded=false,tab=null,hide=false,timerEnd=0,lastStep=-1;
+const cur=()=>STEPS[S.step];
+const cnt=(k,id)=>players.filter(x=>x[k]===id).length;
+function dropIdx(){
+  if(typeof S.drop==='number')return S.drop;
+  if(!host)return 2;
+  let best=-1,bi=2;
+  for(let i=0;i<3;i++){const c=cnt('v',String(i));if(c>=best){best=c;bi=i}}
+  return bi;
+}
+const CH=()=>[0,1,2].filter(i=>i!==dropIdx());
+const sidx=st=>CH()[st.n];
+const lab=s=>({lobby:'Introduction',ground:'Introduction',vote:'Introduction',pick:`S${s.n+1} · Scene & priority`,internal:`S${s.n+1} · Pillar huddle`,external:`S${s.n+1} · Cross-pillar debate`,reselect:`S${s.n+1} · Reconsider`,final:'Conclusion / Debrief',results:'Conclusion / Debrief'})[s.k];
 
 function listen(c){
   code=c;loaded=false;
@@ -57,71 +86,96 @@ function listen(c){
   if(host){
     onSnapshot(collection(db,'sessions',c,'players'),q=>{players=q.docs.map(d=>d.data());draw()});
     onSnapshot(collection(db,'sessions',c,'points'),q=>{points=q.docs.map(d=>d.data()).sort((a,b)=>a.at-b.at);draw()});
-  }else onSnapshot(doc(db,'sessions',c,'players',pid),d=>{me=d.data()||{};draw()});
+  }else{
+    onSnapshot(doc(db,'sessions',c,'players',pid),d=>{me=d.data()||{};draw()});
+    onSnapshot(query(collection(db,'sessions',c,'points'),where('pid','==',pid)),q=>{mineAll=q.docs.map(d=>d.data()).sort((a,b)=>a.at-b.at);draw()});
+  }
 }
 const draw=()=>host?drawHost():drawPlayer();
 
 /* ---------- PARTICIPANT ---------- */
-const picker=k=>`<div class="pk">${P.map(p=>`<button data-set="${k}:${p.id}" class="${me[k]===p.id?'on':''}" style="--c:${p.c}">${p.n}</button>`).join('')}</div>`;
+const picker=k=>`<div class="pk">${P.map(p=>`<button data-set="${k}:${p.id}" class="${me[k]===p.id?'on':''}" style="--c:${p.c};--fg:${p.fg}">${p.n}</button>`).join('')}</div>`;
+const votePicker=()=>`<div class="pk">${S.scenarios.map((s,i)=>`<button data-set="v:${i}" class="${me.v===String(i)?'on':''}" style="--c:#cfd3d8;--fg:#111">${esc(s.name)}</button>`).join('')}</div>`;
 function drawPlayer(){
   const W=h=>app.innerHTML=`<div class="wrap">${h}</div>`;
   if(!code)return W(`<h1>Join the session</h1><input id="cd" placeholder="Session code" maxlength="4" autocapitalize="characters"><button class="go" data-a="join">Join</button>`);
   if(!loaded)return W('<p>Connecting…</p>');
   if(!S)return W('<h1>Session not found</h1><p>Check the code and try again.</p>');
   if(S.ended)return W("<h1>Session ended 🙌</h1><p>Thanks for taking part — look at the big screen for the room's results.</p>");
-  const st=cur(),sc=S.scenarios[st.i]||{},i=st.i;let b='';
-  if(st.k==='lobby')b="<h1>You're in ✓</h1><p>Waiting for the facilitator to start…</p>";
-  if(st.k==='ground')b=`<h2>Ground 0</h2><p>No scenario yet. Off the top of your head, what do you stand for?</p>${picker('g')}`;
-  if(st.k==='pick')b=`<h2>${esc(sc.name)}</h2><p>${esc(sc.blurb)}</p><p><b>Where do you stand on this?</b></p>${picker('o'+i)}`;
-  if(st.k==='discuss'){
-    const o=me['o'+i],my=mine[i]||[];
-    b=`<h2>${esc(sc.name)}</h2>`+(o?`<p>You're arguing for <b style="color:${pn(o).c}">${pn(o).n}</b>. Add as many points as you like, max 5 words each.</p><input id="pt" placeholder="e.g. Saves lives, costs jobs" autocomplete="off"><button class="go" data-a="add">Add point</button><p class="err" id="err"></p><ul>${my.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:`<p>Pick a side first.</p>${picker('o'+i)}`);
+  const st=cur(),i=st.n===undefined?null:sidx(st),sc=(i!==null&&S.scenarios[i])||{};
+  const jn=(JMAP[st.k]||[])[0];
+  let b=jn?`<p class="jl">0${jn} · ${JN[jn-1]}</p>`:'';
+  if(st.k==='lobby')b+="<h1>You're in ✓</h1><p>Waiting for the facilitator to start…</p>";
+  if(st.k==='ground')b+=`<h2>Your first instinct</h2><p>No scenario yet. Off the top of your head, which pillar matters most to you?</p>${picker('g')}`;
+  if(st.k==='vote')b+=`<h2>Which scenario should we leave out?</h2><p>We only have time for two. Tap the one you'd remove. The scenario with the most votes is dropped.</p>${votePicker()}`;
+  if(st.k==='pick')b+=`<h2>${esc(sc.name)}</h2><p>${esc(sc.blurb)}</p><p><b>Where do you stand on this?</b></p>${picker('o'+i)}`;
+  if(st.k==='internal'||st.k==='external'){
+    const o=me['o'+i],my=mineAll.filter(x=>x.s===i);
+    b+=`<h2>${esc(sc.name)}</h2>`+(o?`<p>${st.k==='internal'?'Huddle with your own pillar first.':'Now debate across the pillars.'} You're speaking for <b style="color:${pn(o).c}">${pn(o).n}</b>. Add the ${T.pt}s you raise, max 5 words each. There's no limit on how many.</p><input id="pt" placeholder="e.g. Saves lives, costs jobs" autocomplete="off"><button class="go" data-a="add">Add</button><p class="err" id="err"></p>${my.length?'<p class="jl">Shared so far</p>':''}<ul>${my.map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul>`:`<p>Pick a side first.</p>${picker('o'+i)}`);
   }
-  if(st.k==='reselect')b=`<h2>${esc(sc.name)}</h2><p>You started at <b>${me['o'+i]?pn(me['o'+i]).n:'—'}</b>. After the debate, where do you stand now?</p>${picker('r'+i)}`;
-  if(st.k==='final')b=`<h2>Last stand</h2><p>Your Ground 0 was <b>${me.g?pn(me.g).n:'—'}</b>. Where do you stand now?</p>${picker('f')}`;
-  if(st.k==='results')b=`<h1>Thank you 🙌</h1><p>Ground 0: <b>${me.g?pn(me.g).n:'—'}</b> → Last stand: <b>${me.f?pn(me.f).n:'—'}</b></p><p>Look at the big screen for the room's result.</p>`;
+  if(st.k==='reselect')b+=`<h2>${esc(sc.name)}</h2><p>You started at <b>${me['o'+i]?pn(me['o'+i]).n:'—'}</b>. After the discussion, where do you stand now?</p>${picker('r'+i)}`;
+  if(st.k==='final')b+=`<h2>${T.f}</h2><p>Your ${T.g.toLowerCase()} was <b>${me.g?pn(me.g).n:'—'}</b>. After everything you've heard, where do you stand now?</p>${picker('f')}`;
+  if(st.k==='results')b+=`<h1>Thank you 🙌</h1><p>${T.g}: <b>${me.g?pn(me.g).n:'—'}</b> → ${T.f}: <b>${me.f?pn(me.f).n:'—'}</b></p><p>Look at the big screen for the room's result.</p>`;
   W(b);
 }
 
 /* ---------- HOST ---------- */
-const box=(l,n,base)=>`<div class="sec"><small>${l}</small><div class="num">${n}${base!=null&&n!==base?`<span class="d ${n>base?'up':'dn'}">${n>base?'▲':'▼'}${Math.abs(n-base)}</span>`:''}</div></div>`;
+const box=(l,n,base)=>`<div class="sec"><small>${l}</small><div class="num">${n}${base!=null&&n!==base?`<span class="d">${n>base?'▲':'▼'}${Math.abs(n-base)}</span>`:''}</div></div>`;
+const flows=(a,b)=>{const both=players.filter(x=>x[a]&&x[b]),ch=both.filter(x=>x[a]!==x[b]),fl={};ch.forEach(x=>{const k=pn(x[a]).n+' → '+pn(x[b]).n;fl[k]=(fl[k]||0)+1});return{both,ch,fl}};
 function hostSetup(){
-  app.innerHTML=`<div class="wrap"><h1>Facilitator</h1><p>Create a session</p><input id="pin" placeholder="Choose a host PIN"><textarea id="sc" rows="8">${DEF}</textarea><p>One scenario per line: Name | short description</p><button class="go" data-a="create">Create session</button><hr style="border-color:#2C333B;margin:26px 0"><p>Resume a session</p><input id="rc" placeholder="Code" value="${localStorage.hostCode||''}"><input id="rp" placeholder="PIN"><button class="go" data-a="resume">Resume</button></div>`;
+  app.innerHTML=`<div class="wrap"><h1>Facilitator</h1><p>Create a session</p><input id="pin" placeholder="Choose a host PIN"><textarea id="sc" rows="6">${DEF}</textarea><p>Exactly 3 scenarios, one per line: Name | one-line reminder. The full scenario stays on your slides.</p><button class="go" data-a="create">Create session</button><hr style="border-color:#2C333B;margin:26px 0"><p>Resume a session</p><input id="rc" placeholder="Code" value="${localStorage.hostCode||''}"><input id="rp" placeholder="PIN"><button class="go" data-a="resume">Resume</button></div>`;
 }
 function drawHost(){
   if(!code)return hostSetup();
   if(!loaded){app.innerHTML='<div class="wrap"><p>Connecting…</p></div>';return}
   if(!S){code=null;return hostSetup()}
   if(S.step!==lastStep){lastStep=S.step;tab=null;const m=MINS[cur().k];timerEnd=m?Date.now()+m*60000:0}
-  const sts=steps(S.scenarios.length),c=cur(),n=S.scenarios.length;
-  const auto=c.k==='lobby'||c.k==='ground'?'g':c.k==='final'||c.k==='results'?'f':'s'+c.i,v=tab||auto;
-  const key={ground:'g',pick:'o'+c.i,reselect:'r'+c.i,final:'f'}[c.k];
+  const c=cur(),CHs=CH(),ci=CHs[c.n];
+  const auto=({lobby:'g',ground:'g',vote:'v',final:'f',results:'r'})[c.k]||('s'+c.n),v=tab||auto;
+  const key={ground:'g',vote:'v',pick:'o'+ci,reselect:'r'+ci,final:'f'}[c.k];
   const ans=key?` · ${players.filter(x=>x[key]).length}/${players.length} answered`:'';
-  const tabs=[['g','Ground 0'],...S.scenarios.map((s,i)=>['s'+i,'S'+(i+1)]),['f','Last Stand']];
-  const cnt=(k,id)=>players.filter(x=>x[k]===id).length;
-  const cols=P.map(p=>{let top,mid='',bot='';
-    if(v==='g')top=box('Ground 0',cnt('g',p.id));
-    else if(v==='f'){top=box('Ground 0',cnt('g',p.id));bot=box('Last stand',cnt('f',p.id),cnt('g',p.id))}
-    else{const i=+v.slice(1);top=box('Opening pick',cnt('o'+i,p.id));
-      mid=`<ul>${points.filter(x=>x.s===i&&x.p===p.id).map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul>`;
-      bot=box('After reselect',cnt('r'+i,p.id),cnt('o'+i,p.id))}
-    return `<div class="col" style="--c:${p.c}"><h3>${p.n}</h3>${top}<div class="sec mid">${mid}</div>${bot}</div>`}).join('');
-  let mv='';
-  if(v==='f'){const both=players.filter(x=>x.g&&x.f),ch=both.filter(x=>x.g!==x.f),fl={};
-    ch.forEach(x=>{const k=pn(x.g).n+' → '+pn(x.f).n;fl[k]=(fl[k]||0)+1});
-    mv=`<div class="mv"><b>${ch.length} of ${both.length}</b> changed their stance since Ground 0.<br>${Object.entries(fl).map(([k,q])=>`${k}: ${q}`).join(' · ')}</div>`}
-  const scn=c.k==='pick'||c.k==='discuss'||c.k==='reselect'?`<h2>${esc(S.scenarios[c.i].name)}</h2><p>${esc(S.scenarios[c.i].blurb)}</p>`:'';
+  const tabs=[['g',T.g],['v','Vote'],['s0','S1'],['s1','S2'],['f',T.f],['r','Results']];
+  const short=i=>S.scenarios[i].name.replace(/^The /i,'');
+  const mvHtml=()=>{const f=flows('g','f');return `<div class="mv"><b>${f.ch.length} of ${f.both.length}</b> changed their stance since ${T.g}.<br>${Object.entries(f.fl).map(([k,q])=>`${k}: ${q}`).join(' · ')}</div>`};
+  let body='';
+  if(v==='v'){
+    const d=dropIdx();
+    body=`<h2>Which scenario do we leave out?</h2><p>The most-removed scenario is suggested. Tap a card to override. It locks in when you press Next.</p><div class="vcards">${S.scenarios.map((s,i)=>`<div class="vc ${i===d?'out':''}" data-drop="${i}"><h3>${esc(s.name)}</h3><div class="num">${cnt('v',String(i))}</div><small>votes to remove</small><div class="tag">${i===d?'LEFT OUT':'IN PLAY'}</div></div>`).join('')}</div>`;
+  }else if(v==='r'){
+    const rows=[[T.g,'g']];
+    CHs.forEach(i=>rows.push([short(i)+' · before','o'+i],[short(i)+' · after','r'+i]));
+    rows.push([T.f,'f']);
+    const bar=k=>{const cs=P.map(p=>cnt(k,p.id)),t=cs.reduce((a,b)=>a+b,0);return `<div class="sb">${P.map((p,j)=>cs[j]?`<span style="width:${cs[j]/t*100}%;background:${p.c};color:${p.fg}">${cs[j]}</span>`:'').join('')}</div>`};
+    const per=CHs.map(i=>{const f=flows('o'+i,'r'+i);return `${esc(short(i))}: <b>${f.ch.length} of ${f.both.length}</b> changed their mind`}).join('<br>');
+    body=`<h2>How the room's priorities shifted</h2><div class="lg">${P.map(p=>`<span><i style="background:${p.c}"></i>${p.n}</span>`).join('')}</div>${rows.map(([l,k])=>`<div class="tr"><div class="tl">${esc(l)}</div>${bar(k)}</div>`).join('')}${mvHtml()}<div class="mv">${per}</div>`;
+  }else{
+    let head='';
+    const colsH=P.map(p=>{let top,mid='',bot='';
+      if(v==='g')top=box(T.g,cnt('g',p.id));
+      else if(v==='f'){top=box(T.g,cnt('g',p.id));bot=box(T.f,cnt('f',p.id),cnt('g',p.id))}
+      else{const i=CHs[+v.slice(1)];top=box(T.b,cnt('o'+i,p.id));
+        mid=`<ul>${points.filter(x=>x.s===i&&x.p===p.id).map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul>`;
+        bot=box(T.a,cnt('r'+i,p.id),cnt('o'+i,p.id))}
+      return `<div class="col" style="--c:${p.c};--fg:${p.fg}"><h3>${p.n}</h3>${top}<div class="sec mid">${mid}</div>${bot}</div>`}).join('');
+    if(v[0]==='s')head=`<h2>${esc(S.scenarios[CHs[+v.slice(1)]].name)}</h2>`;
+    body=`${head}<div class="cols">${colsH}</div>${v==='f'?mvHtml():''}`;
+  }
   const endedBanner=S.ended?'<div class="mv" style="border-color:#e07a7a;margin-bottom:14px">This session has ended — participants see a thank-you screen. You can still browse results below, reopen it, or reset it for a fresh test.</div>':'';
+  const jmap=JMAP[c.k]||[];
   app.innerHTML=`<div class="wrap wide">${hide?'<button data-a="hide" style="float:right">Controls</button>':`<div class="bar"><div><b>Code ${code}</b><span>· ${esc(location.host+location.pathname)}?s=${code}</span><span>· ${players.length} joined</span></div>
-   <div><b>${lab(c)}</b><span>${ans}</span><b id="tm"></b><button data-a="prev">‹ Back</button><button data-a="next">Next ›</button><button data-a="hide">Hide</button><button data-a="reset">↺ Reset</button><button data-a="end">${S.ended?'Reopen':'⏹ End'}</button></div></div>
-   <div class="bar tabs"><div>${tabs.map(([k,l])=>`<button data-tab="${k}" class="${v===k?'on':''}">${l}</button>`).join('')}</div></div>`}
-   ${endedBanner}${c.k==='lobby'?'<div class="qr" id="qr"></div>':''}${scn}<div class="cols">${cols}</div>${mv}</div>`;
+   <div><b>${lab(c)}</b><span>${ans}</span><b id="tm"></b><button data-a="prev">‹ Back</button><button data-a="next">Next ›</button><button data-a="hide">Hide</button><button data-a="reset">↺ Reset</button><button data-a="end">${S.ended?'Reopen':'⏹ End'}</button></div></div>`}
+   <div class="jn">${JN.map((t,j)=>`<span class="${jmap.includes(j+1)?'on':''}">0${j+1} ${t}</span>`).join('')}</div>
+   ${hide?'':`<div class="bar tabs"><div>${tabs.map(([k,l])=>`<button data-tab="${k}" class="${v===k?'on':''}">${l}</button>`).join('')}</div></div>`}
+   ${endedBanner}${c.k==='lobby'?'<div class="qr" id="qr"></div>':''}${body}</div>`;
   if(c.k==='lobby'&&window.QRCode)new QRCode($('#qr'),{text:location.origin+location.pathname+'?s='+code,width:220,height:220});
 }
 setInterval(()=>{const e=$('#tm');if(!e)return;if(!timerEnd){e.textContent='';return}const s=Math.max(0,Math.round((timerEnd-Date.now())/1000));e.textContent='⏱ '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0')},1000);
 
 /* ---------- EVENTS ---------- */
+app.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='pt'){const b=$('button[data-a="add"]');if(b)b.click()}});
 app.addEventListener('click',async e=>{
+  const dc=e.target.closest('[data-drop]');
+  if(dc&&host){updateDoc(sref(code),{drop:+dc.dataset.drop});return}
   const t=e.target.closest('button');if(!t)return;
   if(t.dataset.set){const[k,v]=t.dataset.set.split(':');me[k]=v;setDoc(doc(db,'sessions',code,'players',pid),{[k]:v},{merge:true});return draw()}
   if(t.dataset.tab){tab=t.dataset.tab;return draw()}
@@ -129,23 +183,25 @@ app.addEventListener('click',async e=>{
   if(a==='join'){const c=$('#cd').value.trim().toUpperCase();if(c)listen(c)}
   if(a==='add'){const x=$('#pt').value.trim().replace(/\s+/g,' ');
     if(!x||x.split(' ').length>5||x.length>60){$('#err').textContent='Keep it to 5 words or fewer.';return}
-    const i=cur().i;addDoc(collection(db,'sessions',code,'points'),{s:i,p:me['o'+i],t:x,pid,at:Date.now()});(mine[i]=mine[i]||[]).push(x);draw()}
+    const i=sidx(cur());addDoc(collection(db,'sessions',code,'points'),{s:i,p:me['o'+i],t:x,pid,at:Date.now()})}
   if(a==='hide'){hide=!hide;draw()}
   if(a==='end'){
     if(S.ended){updateDoc(sref(code),{ended:false});return}
     if(confirm('End this session for everyone now? Participants will see a thank-you screen. All answers and points stay saved so you can keep reviewing the results.'))updateDoc(sref(code),{ended:true});
   }
   if(a==='reset'){
-    if(!confirm('Clear all answers and points and restart from Ground 0? The same code and PIN keep working — this is meant for re-running tests.'))return;
+    if(!confirm('Clear all answers and points and restart from the lobby? The same code and PIN keep working — this is meant for re-running tests.'))return;
     t.disabled=true;
     const[pd,xd]=await Promise.all([getDocs(collection(db,'sessions',code,'players')),getDocs(collection(db,'sessions',code,'points'))]);
     await Promise.all([...pd.docs,...xd.docs].map(d=>deleteDoc(d.ref)));
-    await updateDoc(sref(code),{step:0,ended:false});
+    await updateDoc(sref(code),{step:0,ended:false,drop:deleteField()});
+    tab=null;
   }
-  if(a==='next'&&S.step<steps(S.scenarios.length).length-1)updateDoc(sref(code),{step:S.step+1});
+  if(a==='next'&&S.step<STEPS.length-1){const u={step:S.step+1};if(cur().k==='vote'&&typeof S.drop!=='number')u.drop=dropIdx();updateDoc(sref(code),u)}
   if(a==='prev'&&S.step>0)updateDoc(sref(code),{step:S.step-1});
   if(a==='create'){const pin=$('#pin').value.trim();if(pin.length<3)return alert('Choose a PIN (3+ characters)');
-    const sc=$('#sc').value.split('\n').map(l=>l.split('|')).filter(x=>x[0].trim()).map(x=>({name:x[0].trim(),blurb:(x[1]||'').trim()}));
+    const sc=$('#sc').value.split('\n').map(l=>l.split('|')).filter(x=>x[0].trim()).map(x=>({name:x[0].trim(),blurb:x.slice(1).join('|').trim()}));
+    if(sc.length!==3)return alert('Please provide exactly 3 scenarios, one per line.');
     const c=Array.from({length:4},()=>'ABCDEFGHJKMNPQRSTUVWXYZ'[Math.random()*23|0]).join('');
     await setDoc(sref(c),{step:0,ended:false,scenarios:sc,pin:await sha(pin),created:Date.now()});localStorage.hostCode=c;listen(c)}
   if(a==='resume'){const c=$('#rc').value.trim().toUpperCase(),d=await getDoc(sref(c));
