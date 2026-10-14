@@ -103,6 +103,7 @@ const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new T
 
 const host=location.hash==='#host';
 const pid=localStorage.pid||(localStorage.pid=Math.random().toString(36).slice(2,10));
+const openTp=new Set();
 let S=null,code=null,players=[],points=[],me={},mineAll=[],loaded=false,tab=null,hide=false,timerEnd=0,lastStep=-1,plLoaded=false,ptLoaded=false,pubStep=-1;
 const cur=()=>STEPS[S.step];
 const cnt=(k,id)=>players.filter(x=>x[k]===id).length;
@@ -143,7 +144,7 @@ function drawPlayer(){
   const st=cur(),i=st.n===undefined?null:sidx(st),sc=(i!==null&&S.scenarios[i])||{};
   if(S.results&&(S.ended||st.k==='results')){
     const g=me.g?pn(me.g):null;
-    app.innerHTML=`<div class="wrap" style="max-width:760px"><h1>Thank you 🙌</h1><p>Your ${T.g}: <b style="color:${g?g.c:'inherit'}">${g?g.n:'—'}</b></p><p>Your stance may shift from one scenario to the next, depending on context. Your ${T.g} is what you carry with you.</p>${resultsHTML(S.results,true)}<p>Bookmark this page to come back to these results any time.</p><button class="lk" data-a="forget">Join a different session</button></div>`;
+    app.innerHTML=`<div class="wrap" style="max-width:760px"><h1>Thank you 🙌</h1><p>Your ${T.g}: <b style="color:${g?g.c:'inherit'}">${g?g.n:'—'}</b></p><p>Your stance may shift from one scenario to the next, depending on context. Your ${T.g} is what you carry with you.</p>${resultsHTML(S.results,true)}<button class="go" data-a="share">📤 Share / save my results</button><p>Tip: bookmark this page too, so you can come back to the results any time.</p><button class="lk" data-a="forget">Join a different session</button></div>`;
     return;
   }
   const jn=(JMAP[st.k]||[])[0];
@@ -167,7 +168,7 @@ const barRow=(l,o)=>`<div class="tr"><div class="tl">${esc(l)}</div>${barH(o)}</
 // Host: turn the live answers into a compact summary that phones can read from the session document
 function buildResults(){
   const cp=k=>Object.fromEntries(P.map(p=>[p.id,cnt(k,p.id)]));
-  return{g:cp('g'),sc:CH().map(i=>({name:S.scenarios[i].name,o:cp('o'+i),r:cp('r'+i),
+  return{g:cp('g'),sc:CH().map(i=>({i,name:S.scenarios[i].name,o:cp('o'+i),r:cp('r'+i),
     m:Object.fromEntries(P.map(p=>[p.id,Object.fromEntries(P.map(q=>[q.id,players.filter(x=>x['o'+i]===p.id&&x['r'+i]===q.id).length]))])),
     pts:Object.fromEntries(P.map(p=>[p.id,points.filter(x=>x.s===i&&x.p===p.id).map(x=>x.t)]))}))};
 }
@@ -180,9 +181,19 @@ function resultsHTML(R,withPts){
     const boxes=P.map(p=>{
       const rows=`<div class="rr" style="color:${p.c}"><span>Remained</span><b>${s.m[p.id][p.id]}</b></div>`+P.filter(q=>q.id!==p.id).map(q=>`<div class="rr" style="color:${q.c}"><span>To ${q.n}</span><b>${s.m[p.id][q.id]}</b></div>`).join('');
       return `<div class="rb" style="${pstyle(p)}"><div class="rt">${p.n}</div>${rows}</div>`}).join('');
-    const pts=withPts?`<details class="tp"><summary>Talking points</summary>${P.map(p=>`<div class="tpp" style="color:${p.c}"><b>${p.n}</b><ul>${(s.pts[p.id]||[]).map(t=>`<li>${esc(t)}</li>`).join('')||'<li>—</li>'}</ul></div>`).join('')}</details>`:'';
+    const pts=withPts?`<details class="tp" data-tp="${n}" ${openTp.has(String(n))?'open':''}><summary>Talking points</summary>${P.map(p=>`<div class="tpp" style="color:${p.c}"><b>${p.n}</b><ul>${(s.pts[p.id]||[]).map(t=>`<li>${esc(t)}</li>`).join('')||'<li>—</li>'}</ul></div>`).join('')}</details>`:'';
     return section(`Scenario ${n+1} · ${esc(s.name)}`,boxes,barRow(T.b,s.o)+barRow(T.a,s.r)+pts)}).join('');
   return `<div class="lg">${P.map(p=>`<span><i style="background:${p.c}"></i>${p.n}</span>`).join('')}</div>`+section(T.g,compass,barRow(T.g,R.g))+scs;
+}
+function resultsText(){
+  const R=S.results,g=me.g?pn(me.g).n:'—',link=location.origin+location.pathname+'?s='+code;
+  const sc=R.sc.map((s,n)=>{
+    const mine=(s.i!==undefined&&me['o'+s.i]&&me['r'+s.i])?`My stance: ${pn(me['o'+s.i]).n} → ${pn(me['r'+s.i]).n}\n`:'';
+    const mv=P.map(p=>`  ${p.n}: ${s.m[p.id][p.id]} remained`+P.filter(q=>q.id!==p.id).map(q=>`, ${s.m[p.id][q.id]} to ${q.n}`).join('')).join('\n');
+    const pts=P.map(p=>`  ${p.n}: ${(s.pts[p.id]||[]).join('; ')||'—'}`).join('\n');
+    return `SCENARIO ${n+1} · ${s.name}\n${mine}How the room moved:\n${mv}\nTalking points:\n${pts}`;
+  }).join('\n\n');
+  return `THE AI TRILEMMA · my results\nMy ${T.g}: ${g}\nThe room's ${T.g}: ${P.map(p=>`${p.n} ${R.g[p.id]}`).join(' · ')}\n\n${sc}\n\nSee the full results again any time: ${link}`;
 }
 function maybePublish(){
   if(cur().k!=='results'){pubStep=-1;return}
@@ -210,7 +221,7 @@ function drawHost(){
     const d=dropIdx();
     body=`<h2>Which scenario do we leave out?</h2><p>The most-removed scenario is suggested. Tap a card to override. It locks in when you press Next.</p><div class="vcards">${S.scenarios.map((s,i)=>`<div class="vc ${i===d?'out':''}" data-drop="${i}"><h3>${esc(s.name)}</h3><div class="num">${cnt('v',String(i))}</div><small>votes to remove</small><div class="tag">${i===d?'LEFT OUT':'IN PLAY'}</div></div>`).join('')}</div>`;
   }else if(v==='r'){
-    body=resultsHTML(buildResults(),false);
+    body=resultsHTML(buildResults(),true);
   }else{
     const colsH=P.map(p=>{let top,mid='',bot='';
       if(v==='g')top=box(T.g,cnt('g',p.id));
@@ -233,6 +244,7 @@ function drawHost(){
 setInterval(()=>{const e=$('#tm');if(!e)return;if(!timerEnd){e.textContent='';return}const s=Math.max(0,Math.round((timerEnd-Date.now())/1000));e.textContent='⏱ '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0')},1000);
 
 /* ---------- EVENTS ---------- */
+app.addEventListener('toggle',e=>{const d=e.target;if(d.dataset&&d.dataset.tp!==undefined){d.open?openTp.add(d.dataset.tp):openTp.delete(d.dataset.tp)}},true);
 app.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='pt'){const b=$('button[data-a="add"]');if(b)b.click()}});
 app.addEventListener('click',async e=>{
   const dc=e.target.closest('[data-drop]');
@@ -247,6 +259,15 @@ app.addEventListener('click',async e=>{
     const i=sidx(cur());addDoc(collection(db,'sessions',code,'points'),{s:i,p:me['o'+i],t:x,pid,at:Date.now()})}
   if(a==='hide'){hide=!hide;draw()}
   if(a==='publish'){updateDoc(sref(code),{results:buildResults()});t.textContent='✓ Sent'}
+  if(a==='share'){
+    const text=resultsText();
+    try{if(!navigator.share)throw 0;await navigator.share({title:'The AI Trilemma – my results',text})}
+    catch(err){
+      if(err&&err.name==='AbortError')return;
+      const u=URL.createObjectURL(new Blob([text],{type:'text/plain'})),l=document.createElement('a');
+      l.href=u;l.download='ai-trilemma-results.txt';document.body.appendChild(l);l.click();l.remove();URL.revokeObjectURL(u);
+    }
+  }
   if(a==='forget'){localStorage.removeItem('lastCode');location.href=location.pathname}
   if(a==='end'){
     if(S.ended){updateDoc(sref(code),{ended:false});return}
