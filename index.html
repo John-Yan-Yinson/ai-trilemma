@@ -65,6 +65,9 @@ button.go{background:var(--ink);color:var(--navy);font-weight:800;border-color:v
 .sb span{display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--navy);overflow:hidden}
 .lg{display:flex;gap:18px;margin:2px 0 14px;font-size:14px;color:var(--dim)}
 .lg i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px}
+.tp{margin:6px 0 4px}.tp summary{cursor:pointer;color:var(--dim);padding:6px 0}
+.tpp{margin:8px 0}.tpp b{color:inherit}.tpp ul{margin:4px 0 0;padding-left:20px}.tpp li{color:var(--ink);margin:3px 0}
+.lk{background:none;border:none;color:var(--dim);text-decoration:underline;padding:8px 0;margin-top:14px;-webkit-backdrop-filter:none;backdrop-filter:none}
 @media(max-width:760px){.cols,.vcards,.rboxes{grid-template-columns:1fr}.tr{grid-template-columns:1fr}}
 </style></head><body><div id="app"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -100,7 +103,7 @@ const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new T
 
 const host=location.hash==='#host';
 const pid=localStorage.pid||(localStorage.pid=Math.random().toString(36).slice(2,10));
-let S=null,code=null,players=[],points=[],me={},mineAll=[],loaded=false,tab=null,hide=false,timerEnd=0,lastStep=-1;
+let S=null,code=null,players=[],points=[],me={},mineAll=[],loaded=false,tab=null,hide=false,timerEnd=0,lastStep=-1,plLoaded=false,ptLoaded=false,pubStep=-1;
 const cur=()=>STEPS[S.step];
 const cnt=(k,id)=>players.filter(x=>x[k]===id).length;
 function dropIdx(){
@@ -118,9 +121,10 @@ function listen(c){
   code=c;loaded=false;
   onSnapshot(sref(c),d=>{S=d.exists()?d.data():null;loaded=true;draw()});
   if(host){
-    onSnapshot(collection(db,'sessions',c,'players'),q=>{players=q.docs.map(d=>d.data());draw()});
-    onSnapshot(collection(db,'sessions',c,'points'),q=>{points=q.docs.map(d=>d.data()).sort((a,b)=>a.at-b.at);draw()});
+    onSnapshot(collection(db,'sessions',c,'players'),q=>{players=q.docs.map(d=>d.data());plLoaded=true;draw()});
+    onSnapshot(collection(db,'sessions',c,'points'),q=>{points=q.docs.map(d=>d.data()).sort((a,b)=>a.at-b.at);ptLoaded=true;draw()});
   }else{
+    localStorage.lastCode=c;
     onSnapshot(doc(db,'sessions',c,'players',pid),d=>{me=d.data()||{};draw()});
     onSnapshot(query(collection(db,'sessions',c,'points'),where('pid','==',pid)),q=>{mineAll=q.docs.map(d=>d.data()).sort((a,b)=>a.at-b.at);draw()});
   }
@@ -134,9 +138,14 @@ function drawPlayer(){
   const W=h=>app.innerHTML=`<div class="wrap">${h}</div>`;
   if(!code)return W(`<h1>Join the session</h1><input id="cd" placeholder="Session code" maxlength="4" autocapitalize="characters"><button class="go" data-a="join">Join</button>`);
   if(!loaded)return W('<p>Connecting…</p>');
-  if(!S)return W('<h1>Session not found</h1><p>Check the code and try again.</p>');
-  if(S.ended)return W("<h1>Session ended 🙌</h1><p>Thanks for taking part — look at the big screen for the room's results.</p>");
+  if(!S)return W('<h1>Session not found</h1><p>Check the code and try again.</p><button class="lk" data-a="forget">Try a different code</button>');
+  if(S.ended&&!S.results)return W("<h1>Session ended 🙌</h1><p>Thanks for taking part — look at the big screen for the room's results.</p>");
   const st=cur(),i=st.n===undefined?null:sidx(st),sc=(i!==null&&S.scenarios[i])||{};
+  if(S.results&&(S.ended||st.k==='results')){
+    const g=me.g?pn(me.g):null;
+    app.innerHTML=`<div class="wrap" style="max-width:760px"><h1>Thank you 🙌</h1><p>Your ${T.g}: <b style="color:${g?g.c:'inherit'}">${g?g.n:'—'}</b></p><p>Your stance may shift from one scenario to the next, depending on context. Your ${T.g} is what you carry with you.</p>${resultsHTML(S.results,true)}<p>Bookmark this page to come back to these results any time.</p><button class="lk" data-a="forget">Join a different session</button></div>`;
+    return;
+  }
   const jn=(JMAP[st.k]||[])[0];
   let b=jn?`<p class="jl">0${jn} · ${JN[jn-1]}</p>`:'';
   if(st.k==='lobby')b+="<h1>You're in ✓</h1><p>Waiting for the facilitator to start…</p>";
@@ -148,11 +157,38 @@ function drawPlayer(){
     b+=`<h2>${esc(sc.name)}</h2>`+(o?`<p>${st.k==='internal'?'Huddle with your own pillar first.':'Now exchange views across the pillars.'} You're speaking for <b style="color:${pn(o).c}">${pn(o).n}</b>. Add the ${T.pt}s you raise, max 5 words each. There's no limit on how many.</p><input id="pt" placeholder="e.g. Saves lives, costs jobs" autocomplete="off"><button class="go" data-a="add">Add</button><p class="err" id="err"></p>${my.length?'<p class="jl">Shared so far</p>':''}<ul>${my.map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul>`:`<p>Pick a side first.</p>${picker('o'+i)}`);
   }
   if(st.k==='reselect')b+=`<h2>${esc(sc.name)}</h2><p>You started at <b>${me['o'+i]?pn(me['o'+i]).n:'—'}</b>. After the discussion, where do you stand now?</p>${picker('r'+i)}`;
-  if(st.k==='results')b+=`<h1>Thank you 🙌</h1><p>Your ${T.g}: <b style="color:${me.g?pn(me.g).c:'inherit'}">${me.g?pn(me.g).n:'—'}</b></p><p>Your stance may shift from one scenario to the next, depending on context. Your ${T.g} is what you carry with you.</p>`;
+  if(st.k==='results')b+=`<h1>Thank you 🙌</h1><p>Your ${T.g}: <b style="color:${me.g?pn(me.g).c:'inherit'}">${me.g?pn(me.g).n:'—'}</b></p><p>Your stance may shift from one scenario to the next, depending on context. Your ${T.g} is what you carry with you.</p><p>Loading the room's results…</p>`;
   W(b);
 }
 
 /* ---------- HOST ---------- */
+const barH=o=>{const cs=P.map(p=>o[p.id]||0),t=cs.reduce((a,b)=>a+b,0);return `<div class="sb">${P.map((p,j)=>cs[j]?`<span style="width:${cs[j]/t*100}%;background:${p.c}">${cs[j]}</span>`:'').join('')}</div>`};
+const barRow=(l,o)=>`<div class="tr"><div class="tl">${esc(l)}</div>${barH(o)}</div>`;
+// Host: turn the live answers into a compact summary that phones can read from the session document
+function buildResults(){
+  const cp=k=>Object.fromEntries(P.map(p=>[p.id,cnt(k,p.id)]));
+  return{g:cp('g'),sc:CH().map(i=>({name:S.scenarios[i].name,o:cp('o'+i),r:cp('r'+i),
+    m:Object.fromEntries(P.map(p=>[p.id,Object.fromEntries(P.map(q=>[q.id,players.filter(x=>x['o'+i]===p.id&&x['r'+i]===q.id).length]))])),
+    pts:Object.fromEntries(P.map(p=>[p.id,points.filter(x=>x.s===i&&x.p===p.id).map(x=>x.t)]))}))};
+}
+// One layout for both the big screen and the phones
+function resultsHTML(R,withPts){
+  const answered=P.reduce((a,p)=>a+(R.g[p.id]||0),0);
+  const section=(title,boxes,rest)=>`<div class="rs"><h3 class="rh">${title}</h3><div class="rboxes">${boxes}</div>${rest}</div>`;
+  const compass=P.map(p=>{const n=R.g[p.id]||0;return `<div class="rb" style="${pstyle(p)}"><div class="rt">${p.n}</div><div class="big">${n}</div><div class="rsub">${answered?Math.round(n/answered*100):0}% of the room</div></div>`}).join('');
+  const scs=R.sc.map((s,n)=>{
+    const boxes=P.map(p=>{
+      const rows=`<div class="rr" style="color:${p.c}"><span>Remained</span><b>${s.m[p.id][p.id]}</b></div>`+P.filter(q=>q.id!==p.id).map(q=>`<div class="rr" style="color:${q.c}"><span>To ${q.n}</span><b>${s.m[p.id][q.id]}</b></div>`).join('');
+      return `<div class="rb" style="${pstyle(p)}"><div class="rt">${p.n}</div>${rows}</div>`}).join('');
+    const pts=withPts?`<details class="tp"><summary>Talking points</summary>${P.map(p=>`<div class="tpp" style="color:${p.c}"><b>${p.n}</b><ul>${(s.pts[p.id]||[]).map(t=>`<li>${esc(t)}</li>`).join('')||'<li>—</li>'}</ul></div>`).join('')}</details>`:'';
+    return section(`Scenario ${n+1} · ${esc(s.name)}`,boxes,barRow(T.b,s.o)+barRow(T.a,s.r)+pts)}).join('');
+  return `<div class="lg">${P.map(p=>`<span><i style="background:${p.c}"></i>${p.n}</span>`).join('')}</div>`+section(T.g,compass,barRow(T.g,R.g))+scs;
+}
+function maybePublish(){
+  if(cur().k!=='results'){pubStep=-1;return}
+  if(!plLoaded||!ptLoaded||pubStep===S.step)return;
+  pubStep=S.step;updateDoc(sref(code),{results:buildResults()});
+}
 const box=(l,n,base)=>`<div class="sec"><small>${l}</small><div class="num">${n}${base!=null&&n!==base?`<span class="d">${n>base?'▲':'▼'}${Math.abs(n-base)}</span>`:''}</div></div>`;
 function hostSetup(){
   app.innerHTML=`<div class="wrap"><h1>Facilitator</h1><p>Create a session</p><input id="pin" placeholder="Choose a host PIN"><textarea id="sc" rows="6">${DEF}</textarea><p>Exactly 3 scenarios, one per line: Name | one-line reminder. The full scenario stays on your slides.</p><button class="go" data-a="create">Create session</button><hr style="border-color:rgba(255,255,255,.2);margin:26px 0"><p>Resume a session</p><input id="rc" placeholder="Code" value="${localStorage.hostCode||''}"><input id="rp" placeholder="PIN"><button class="go" data-a="resume">Resume</button></div>`;
@@ -163,6 +199,7 @@ function drawHost(){
   if(!S){code=null;return hostSetup()}
   if(S.step!==lastStep){lastStep=S.step;tab=null;const m=MINS[cur().k];timerEnd=m?Date.now()+m*60000:0}
   const c=cur(),CHs=CH(),ci=CHs[c.n];
+  maybePublish();
   const auto=({lobby:'g',ground:'g',vote:'v',results:'r'})[c.k]||('s'+c.n),v=tab||auto;
   const key={ground:'g',vote:'v',pick:'o'+ci,reselect:'r'+ci}[c.k];
   const ans=key?` · ${players.filter(x=>x[key]).length}/${players.length} answered`:'';
@@ -173,18 +210,7 @@ function drawHost(){
     const d=dropIdx();
     body=`<h2>Which scenario do we leave out?</h2><p>The most-removed scenario is suggested. Tap a card to override. It locks in when you press Next.</p><div class="vcards">${S.scenarios.map((s,i)=>`<div class="vc ${i===d?'out':''}" data-drop="${i}"><h3>${esc(s.name)}</h3><div class="num">${cnt('v',String(i))}</div><small>votes to remove</small><div class="tag">${i===d?'LEFT OUT':'IN PLAY'}</div></div>`).join('')}</div>`;
   }else if(v==='r'){
-    const bar=k=>{const cs=P.map(p=>cnt(k,p.id)),t=cs.reduce((a,b)=>a+b,0);return `<div class="sb">${P.map((p,j)=>cs[j]?`<span style="width:${cs[j]/t*100}%;background:${p.c}">${cs[j]}</span>`:'').join('')}</div>`};
-    const barRow=(l,k)=>`<div class="tr"><div class="tl">${esc(l)}</div>${bar(k)}</div>`;
-    const section=(title,boxes,bars)=>`<div class="rs"><h3 class="rh">${title}</h3><div class="rboxes">${boxes}</div>${bars}</div>`;
-    const answered=players.filter(x=>x.g).length;
-    const compassBoxes=P.map(p=>{const n=cnt('g',p.id);return `<div class="rb" style="${pstyle(p)}"><div class="rt">${p.n}</div><div class="big">${n}</div><div class="rsub">${answered?Math.round(n/answered*100):0}% of the room</div></div>`}).join('');
-    const moveBoxes=i=>P.map(p=>{
-      const mv=q=>players.filter(x=>x['o'+i]===p.id&&x['r'+i]===q.id).length;
-      const rows=`<div class="rr" style="color:${p.c}"><span>Remained</span><b>${mv(p)}</b></div>`+P.filter(q=>q.id!==p.id).map(q=>`<div class="rr" style="color:${q.c}"><span>To ${q.n}</span><b>${mv(q)}</b></div>`).join('');
-      return `<div class="rb" style="${pstyle(p)}"><div class="rt">${p.n}</div>${rows}</div>`}).join('');
-    body=`<div class="lg">${P.map(p=>`<span><i style="background:${p.c}"></i>${p.n}</span>`).join('')}</div>`
-      +section(T.g,compassBoxes,barRow(T.g,'g'))
-      +CHs.map((i,n)=>section(`Scenario ${n+1} · ${esc(S.scenarios[i].name)}`,moveBoxes(i),barRow(T.b,'o'+i)+barRow(T.a,'r'+i))).join('');
+    body=resultsHTML(buildResults(),false);
   }else{
     const colsH=P.map(p=>{let top,mid='',bot='';
       if(v==='g')top=box(T.g,cnt('g',p.id));
@@ -198,7 +224,7 @@ function drawHost(){
   const endedBanner=S.ended?'<div class="mv" style="border-color:#ffb3b3;margin:0 0 14px">This session has ended — participants see a thank-you screen. You can still browse results below, reopen it, or reset it for a fresh test.</div>':'';
   const jmap=JMAP[c.k]||[];
   app.innerHTML=`<div class="wrap wide">${hide?'<button data-a="hide" style="float:right">Controls</button>':`<div class="bar"><div><b>Code ${code}</b><span>· ${esc(location.host+location.pathname)}?s=${code}</span><span>· ${players.length} joined</span></div>
-   <div><b>${lab(c)}</b><span>${ans}</span><b id="tm"></b><button data-a="prev">‹ Back</button><button data-a="next">Next ›</button><button data-a="hide">Hide</button><button data-a="reset">↺ Reset</button><button data-a="end">${S.ended?'Reopen':'⏹ End'}</button></div></div>`}
+   <div><b>${lab(c)}</b><span>${ans}</span><b id="tm"></b><button data-a="prev">‹ Back</button><button data-a="next">Next ›</button>${c.k==='results'?'<button data-a="publish">↻ Update phones</button>':''}<button data-a="hide">Hide</button><button data-a="reset">↺ Reset</button><button data-a="end">${S.ended?'Reopen':'⏹ End'}</button></div></div>`}
    <div class="jn">${JN.map((t,j)=>`<span class="${jmap.includes(j+1)?'on':''}">0${j+1} ${t}</span>`).join('')}</div>
    ${hide?'':`<div class="bar tabs"><div>${tabs.map(([k,l])=>`<button data-tab="${k}" class="${v===k?'on':''}">${l}</button>`).join('')}</div></div>`}
    ${endedBanner}${c.k==='lobby'?'<div class="qr" id="qr"></div>':''}${body}</div>`;
@@ -220,6 +246,8 @@ app.addEventListener('click',async e=>{
     if(!x||x.split(' ').length>5||x.length>60){$('#err').textContent='Keep it to 5 words or fewer.';return}
     const i=sidx(cur());addDoc(collection(db,'sessions',code,'points'),{s:i,p:me['o'+i],t:x,pid,at:Date.now()})}
   if(a==='hide'){hide=!hide;draw()}
+  if(a==='publish'){updateDoc(sref(code),{results:buildResults()});t.textContent='✓ Sent'}
+  if(a==='forget'){localStorage.removeItem('lastCode');location.href=location.pathname}
   if(a==='end'){
     if(S.ended){updateDoc(sref(code),{ended:false});return}
     if(confirm('End this session for everyone now? Participants will see a thank-you screen. All answers and points stay saved so you can keep reviewing the results.'))updateDoc(sref(code),{ended:true});
@@ -229,7 +257,7 @@ app.addEventListener('click',async e=>{
     t.disabled=true;
     const[pd,xd]=await Promise.all([getDocs(collection(db,'sessions',code,'players')),getDocs(collection(db,'sessions',code,'points'))]);
     await Promise.all([...pd.docs,...xd.docs].map(d=>deleteDoc(d.ref)));
-    await updateDoc(sref(code),{step:0,ended:false,drop:deleteField()});
+    await updateDoc(sref(code),{step:0,ended:false,drop:deleteField(),results:deleteField()});
     tab=null;
   }
   if(a==='next'&&S.step<STEPS.length-1){const u={step:S.step+1};if(cur().k==='vote'&&typeof S.drop!=='number')u.drop=dropIdx();updateDoc(sref(code),u)}
@@ -244,6 +272,6 @@ app.addEventListener('click',async e=>{
     localStorage.hostCode=c;listen(c)}
 });
 
-const q=new URLSearchParams(location.search).get('s');
-if(q&&!host)listen(q.toUpperCase());else draw();
+const q=new URLSearchParams(location.search).get('s')||(!host&&localStorage.lastCode);
+if(q&&!host)listen(String(q).toUpperCase());else draw();
 </script></body></html>
