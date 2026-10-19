@@ -15,6 +15,9 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;background:url(bg.jpg)
 h1,h2{margin:.2em 0}p{color:var(--dim)}b{color:var(--ink)}
 input,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.07);color:var(--ink);font:inherit;margin:6px 0;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 input::placeholder,textarea::placeholder{color:var(--dim)}
+select{width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.07);color:var(--ink);font:inherit;margin:6px 0;color-scheme:dark}
+select option{background:#1C1B45;color:var(--ink)}
+.rnote{color:var(--dim);font-size:14px;margin:6px 0}
 button{font:inherit;cursor:pointer;border-radius:12px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.08);color:var(--ink);padding:9px 14px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 button:hover{background:rgba(255,255,255,.17)}
 button.go{background:var(--ink);color:var(--navy);font-weight:800;border-color:var(--ink);width:100%;padding:13px;margin-top:6px}
@@ -90,6 +93,8 @@ const pn=id=>P.find(p=>p.id===id);
 const pstyle=p=>`--c:${p.c};--rgb:${p.rgb}`;
 // Wording used across the screens. Change it here to rename it everywhere.
 const T={g:'Value Compass',b:'Before discussion',a:'After discussion',pt:'talking point'};
+const ROLES=[{id:'sus',n:'Sustainability & Environment'},{id:'ppl',n:'People, HR & Social Impact'},{id:'fin',n:'Finance & Strategy'},{id:'tech',n:'Technology & Data'},{id:'ops',n:'Operations & Engineering'},{id:'pol',n:'Policy, Legal & Government'},{id:'biz',n:'Business & Entrepreneurship'},{id:'stu',n:'Student & Research'},{id:'oth',n:'Other / prefer not to say'}];
+const MIN_GROUP=3; // a role group is only shown when at least this many people are in it
 const JN=['Choose a pillar','Set the scene','Assess your pillar','Test and challenge','Reconsider your pillar','Conclusion'];
 const JMAP={lobby:[],ground:[1],vote:[2],pick:[2,3],internal:[4],external:[4],reselect:[5],results:[6]};
 const DEF=`The Hospital AI roll-out | Faster diagnoses and shorter waits, versus missed rare cases and fewer frontline staff.
@@ -142,6 +147,8 @@ const draw=()=>host?drawHost():drawPlayer();
 /* ---------- PARTICIPANT ---------- */
 const picker=k=>`<div class="pk${locked()?' locked':''}">${P.map(p=>`<button ${locked()?'disabled ':''}data-set="${k}:${p.id}" class="${me[k]===p.id?'on':''}" style="${pstyle(p)}">${p.n}</button>`).join('')}</div>`;
 const votePicker=()=>`<div class="pk${locked()?' locked':''}">${S.scenarios.map((s,i)=>`<button ${locked()?'disabled ':''}data-set="v:${i}" class="${me.v===String(i)?'on':''}" style="--c:#E8E7FF;--rgb:232,231,255">${esc(s.name)}</button>`).join('')}</div>`;
+const roleSelect=()=>`<select id="role" aria-label="Your role"><option value="">Choose your role…</option>${ROLES.map(r=>`<option value="${r.id}" ${me.role===r.id?'selected':''}>${esc(r.n)}</option>`).join('')}</select>`;
+const rolePrompt=()=>`<div class="mv" style="margin:18px 0 0;padding:12px 14px"><p style="margin:0 0 2px">Quick one, optional: what kind of work do you do?</p>${roleSelect()}</div>`;
 function drawPlayer(){
   const W=h=>app.innerHTML=`<div class="wrap">${h}</div>`;
   if(!code)return W(`<h1>Join the session</h1><input id="cd" placeholder="Session code" maxlength="4" autocapitalize="characters"><button class="go" data-a="join">Join</button>`);
@@ -156,8 +163,8 @@ function drawPlayer(){
   }
   const jn=(JMAP[st.k]||[])[0];
   let b=jn?`<p class="jl">0${jn} · ${JN[jn-1]}</p>`:'';
-  if(st.k==='lobby')b+="<h1>You're in ✓</h1><p>Waiting for the facilitator to start…</p>";
-  if(st.k==='ground')b+=`<h2>Your ${T.g}</h2><p>No scenario yet. Off the top of your head, which pillar matters most to you?</p>${picker('g')}${lockNote()}`;
+  if(st.k==='lobby')b+=`<h1>You're in ✓</h1><p>While we wait: what kind of work do you do? At the end we'll show how roles lean across the pillars, but only for groups of ${MIN_GROUP} or more.</p>${roleSelect()}<p>${me.role?'Thanks! ':''}Waiting for the facilitator to start…</p>`;
+  if(st.k==='ground')b+=`<h2>Your ${T.g}</h2><p>No scenario yet. Off the top of your head, which pillar matters most to you?</p>${picker('g')}${lockNote()}${me.role?'':rolePrompt()}`;
   if(st.k==='vote')b+=`<h2>Which scenario should we leave out?</h2><p>We only have time for two. Tap the one you'd remove. The scenario with the most votes is dropped.</p>${votePicker()}${lockNote()}`;
   if(st.k==='pick')b+=`<h2>${esc(sc.name)}</h2><p>${esc(sc.blurb)}</p><p><b>Where do you stand on this?</b></p>${picker('o'+i)}${lockNote()}`;
   if(st.k==='internal'||st.k==='external'){
@@ -173,9 +180,24 @@ function drawPlayer(){
 const barH=o=>{const cs=P.map(p=>o[p.id]||0),t=cs.reduce((a,b)=>a+b,0);return `<div class="sb">${P.map((p,j)=>cs[j]?`<span style="width:${cs[j]/t*100}%;background:${p.c}">${cs[j]}</span>`:'').join('')}</div>`};
 const barRow=(l,o)=>`<div class="tr"><div class="tl">${esc(l)}</div>${barH(o)}</div>`;
 // Host: turn the live answers into a compact summary that phones can read from the session document
+// Value Compass by role. Only aggregated numbers leave this function.
+// Rule: a named role is shown only if >= MIN_GROUP people are in it. Smaller ones are folded into "Other / prefer not to say".
+// If that leaves 1-2 people in Other, the smallest shown group is folded in too, so a small leftover can't be worked out by subtraction.
+function roleLens(){
+  const grp={};ROLES.forEach(r=>grp[r.id]=[]);
+  players.filter(x=>x.g).forEach(x=>grp[ROLES.some(r=>r.id===x.role)?x.role:'oth'].push(x.g));
+  let pool=grp.oth.slice();
+  let named=ROLES.filter(r=>r.id!=='oth'&&grp[r.id].length).map(r=>({id:r.id,v:grp[r.id]}));
+  named=named.filter(o=>{if(o.v.length>=MIN_GROUP)return true;pool=pool.concat(o.v);return false});
+  while(pool.length>0&&pool.length<MIN_GROUP&&named.length){named.sort((a,b)=>a.v.length-b.v.length);pool=pool.concat(named.shift().v)}
+  const cg=v=>Object.fromEntries(P.map(p=>[p.id,v.filter(x=>x===p.id).length]));
+  const rows=ROLES.filter(r=>named.some(o=>o.id===r.id)).map(r=>({n:r.n,c:cg(named.find(o=>o.id===r.id).v)}));
+  if(rows.length&&pool.length>=MIN_GROUP)rows.push({n:ROLES[ROLES.length-1].n,c:cg(pool)});
+  return{rows};
+}
 function buildResults(){
   const cp=k=>Object.fromEntries(P.map(p=>[p.id,cnt(k,p.id)]));
-  return{g:cp('g'),sc:CH().map(i=>({i,name:S.scenarios[i].name,o:cp('o'+i),r:cp('r'+i),
+  return{g:cp('g'),roles:roleLens(),sc:CH().map(i=>({i,name:S.scenarios[i].name,o:cp('o'+i),r:cp('r'+i),
     m:Object.fromEntries(P.map(p=>[p.id,Object.fromEntries(P.map(q=>[q.id,players.filter(x=>x['o'+i]===p.id&&x['r'+i]===q.id).length]))])),
     pts:Object.fromEntries(P.map(p=>[p.id,points.filter(x=>x.s===i&&x.p===p.id).map(x=>x.t)]))}))};
 }
@@ -190,7 +212,9 @@ function resultsHTML(R,withPts){
       return `<div class="rb" style="${pstyle(p)}"><div class="rt">${p.n}</div>${rows}</div>`}).join('');
     const pts=withPts?`<details class="tp" data-tp="${n}" ${openTp.has(String(n))?'open':''}><summary>Talking points</summary>${P.map(p=>`<div class="tpp" style="color:${p.c}"><b>${p.n}</b><ul>${(s.pts[p.id]||[]).map(t=>`<li>${esc(t)}</li>`).join('')||'<li>—</li>'}</ul></div>`).join('')}</details>`:'';
     return section(`Scenario ${n+1} · ${esc(s.name)}`,boxes,barRow(T.b,s.o)+barRow(T.a,s.r)+pts)}).join('');
-  return `<div class="lg">${P.map(p=>`<span><i style="background:${p.c}"></i>${p.n}</span>`).join('')}</div>`+section(T.g,compass,barRow(T.g,R.g))+scs;
+  const tot=c=>P.reduce((a,p)=>a+(c[p.id]||0),0),rl=(R.roles&&R.roles.rows)||[];
+  const roleSec=R.roles?`<div class="rs"><h3 class="rh">Role lens</h3>${rl.length?`<p class="rnote">${T.g} by role. Groups of fewer than ${MIN_GROUP} people are combined, so nobody can be picked out.</p>${barRow('Whole room ('+tot(R.g)+')',R.g)}${rl.map(r=>barRow(`${r.n} (${tot(r.c)})`,r.c)).join('')}<p class="rnote">Which pillar does your role pull you towards, and who in your world pulls the other way?</p>`:`<p class="rnote">Not enough people per role (minimum ${MIN_GROUP}) to show a breakdown for this room.</p>`}</div>`:'';
+  return `<div class="lg">${P.map(p=>`<span><i style="background:${p.c}"></i>${p.n}</span>`).join('')}</div>`+section(T.g,compass,barRow(T.g,R.g))+scs+roleSec;
 }
 function resultsText(){
   const R=S.results,g=me.g?pn(me.g).n:'—',link=location.origin+location.pathname+'?s='+code;
@@ -200,7 +224,9 @@ function resultsText(){
     const pts=P.map(p=>`  ${p.n}: ${(s.pts[p.id]||[]).join('; ')||'—'}`).join('\n');
     return `SCENARIO ${n+1} · ${s.name}\n${mine}How the room moved:\n${mv}\nTalking points:\n${pts}`;
   }).join('\n\n');
-  return `THE AI TRILEMMA · my results\nMy ${T.g}: ${g}\nThe room's ${T.g}: ${P.map(p=>`${p.n} ${R.g[p.id]}`).join(' · ')}\n\n${sc}\n\nSee the full results again any time: ${link}`;
+  const rl=(R.roles&&R.roles.rows)||[];
+  const roleTxt=rl.length?`\n\nROLE LENS (${T.g} by role; groups under ${MIN_GROUP} are combined)\n`+rl.map(r=>`  ${r.n} (${P.reduce((a,p)=>a+(r.c[p.id]||0),0)}): ${P.map(p=>`${p.n} ${r.c[p.id]||0}`).join(' · ')}`).join('\n'):'';
+  return `THE AI TRILEMMA · my results\nMy ${T.g}: ${g}\nThe room's ${T.g}: ${P.map(p=>`${p.n} ${R.g[p.id]}`).join(' · ')}\n\n${sc}${roleTxt}\n\nSee the full results again any time: ${link}`;
 }
 function maybePublish(){
   if(cur().k!=='results'){pubStep=-1;return}
@@ -220,7 +246,7 @@ function drawHost(){
   const c=cur(),CHs=CH(),ci=CHs[c.n];
   maybePublish();
   const auto=({lobby:'g',ground:'g',vote:'v',results:'r'})[c.k]||('s'+c.n),v=tab||auto;
-  const key={ground:'g',vote:'v',pick:'o'+ci,reselect:'r'+ci}[c.k];
+  const key={lobby:'role',ground:'g',vote:'v',pick:'o'+ci,reselect:'r'+ci}[c.k];
   const ans=key?` · ${players.filter(x=>x[key]).length}/${players.length} answered`:'';
   const tabs=[['g',T.g],['v','Vote'],['s0','S1'],['s1','S2'],['r','Results']];
   const short=i=>S.scenarios[i].name.replace(/^The /i,'');
@@ -261,6 +287,7 @@ setInterval(()=>{
 
 /* ---------- EVENTS ---------- */
 app.addEventListener('toggle',e=>{const d=e.target;if(d.dataset&&d.dataset.tp!==undefined){d.open?openTp.add(d.dataset.tp):openTp.delete(d.dataset.tp)}},true);
+app.addEventListener('change',e=>{if(e.target.id==='role'&&e.target.value){me.role=e.target.value;setDoc(doc(db,'sessions',code,'players',pid),{role:me.role},{merge:true});draw()}});
 app.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.id==='pt'){const b=$('button[data-a="add"]');if(b)b.click()}});
 app.addEventListener('click',async e=>{
   const dc=e.target.closest('[data-drop]');
