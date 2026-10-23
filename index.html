@@ -205,12 +205,12 @@ function resultsHTML(R,withPts){
     const rows=`<div class="rr" style="color:${p.c}"><span>Remained</span><b>${m[p.id][p.id]}</b></div>`+P.filter(q=>q.id!==p.id).map(q=>`<div class="rr" style="color:${q.c}"><span>To ${q.n}</span><b>${m[p.id][q.id]}</b></div>`).join('');
     return `<div class="rb" style="${pstyle(p)}"><div class="rt">${p.n}</div>${rows}</div>`}).join('');
   const pc=(c,p)=>{const t=tot(c);return t?Math.round((c[p.id]||0)/t*100):0};
-  const dl=d=>P.map(p=>`<span style="color:${p.c}">${p.n} ${d[p.id]>0?'▲'+d[p.id]:d[p.id]<0?'▼'+(-d[p.id]):'0'}</span>`).join(' · ');
+  const split=c=>P.map(p=>`<span style="color:${p.c}">${p.n} ${pc(c,p)}%</span>`).join(' · ');
   const trow=(label,c,line)=>`<div class="tr"><div class="tl">${esc(label)}</div><div>${barH(c)}<div class="dl">${line}</div></div></div>`;
   const tn=R.trend||[];
-  const trendSec=section(`${T.g}: the baseline`,`Arrows show the change in percentage points against the ${T.g}, counting only people who answered both.`,'',
-    trow(T.g,R.g,P.map(p=>`<span style="color:${p.c}">${p.n} ${pc(R.g,p)}%</span>`).join(' · '))
-    +tn.map((t,k)=>trow(`After Scenario ${k+1}`,t.c,dl(t.d))).join(''));
+  const trendSec=section(`${T.g}: the baseline`,`The room's split at each point. Compare each row against the ${T.g} to see how far it has moved.`,'',
+    trow(T.g,R.g,split(R.g))
+    +tn.map((t,k)=>trow(`After Scenario ${k+1}`,t.c,split(t.c))).join(''));
   const segs=[['adopt','#B8A6FF','Adopted the pillar they argued'],['hold','#8EC9FF','Held their Value Compass'],['third','#C9C7E6','Moved to the third pillar']];
   const lensRow=l=>{
     if(!l||!l.n)return '';
@@ -271,7 +271,7 @@ function drawHost(){
       if(v==='g')top=box(T.g,base);
       else{const i=+v.slice(1);top=box(T.as,cnt('a'+i,p.id));
         mid=`<ul>${points.filter(x=>x.s===i&&x.p===p.id).map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul>`;
-        bot=showAfter?box(`${T.a} · change vs ${T.g}`,cnt('r'+i,p.id),base):hid(T.a)}
+        bot=showAfter?box(T.a,cnt('r'+i,p.id),base):hid(T.a)}
       return `<div class="col" style="${pstyle(p)}"><h3>${p.n}</h3>${top}<div class="sec mid">${mid}</div>${bot}</div>`}).join('');
     const head=v[0]==='s'?`<h2>${esc(S.scenarios[+v.slice(1)].name)}</h2>`:'';
     body=`${head}<div class="cols">${colsH}</div>`;
