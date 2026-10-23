@@ -78,7 +78,7 @@ button.go{background:var(--ink);color:var(--navy);font-weight:800;border-color:v
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getFirestore,doc,setDoc,getDoc,updateDoc,deleteDoc,deleteField,onSnapshot,collection,addDoc,getDocs,query,where,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,doc,setDoc,getDoc,updateDoc,deleteDoc,deleteField,onSnapshot,collection,addDoc,getDocs,query,where} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const CONFIG={apiKey:"AIzaSyASMLP6fIP2U4COqCR_AYJHmBe19DhVuqc",authDomain:"oyw---ai-trilemma-workshop.firebaseapp.com",projectId:"oyw---ai-trilemma-workshop",storageBucket:"oyw---ai-trilemma-workshop.firebasestorage.app",messagingSenderId:"380446389895",appId:"1:380446389895:web:6d1d97f281a14602c42a22"};
 
@@ -93,40 +93,39 @@ const P=[
 const pn=id=>P.find(p=>p.id===id);
 const pstyle=p=>`--c:${p.c};--rgb:${p.rgb}`;
 // Wording used across the screens. Change it here to rename it everywhere.
-const T={g:'Value Compass',as:'Assigned to speak',a:'After discussion',c:'Compass check',pt:'talking point'};
+const T={g:'Value Compass',as:'Assigned to speak',a:'After discussion',pt:'talking point'};
 const ROLES=[{id:'sus',n:'Sustainability & Environment'},{id:'ppl',n:'People, HR & Social Impact'},{id:'fin',n:'Finance & Strategy'},{id:'tech',n:'Technology & Data'},{id:'ops',n:'Operations & Engineering'},{id:'pol',n:'Policy, Legal & Government'},{id:'biz',n:'Business & Entrepreneurship'},{id:'stu',n:'Student & Research'},{id:'oth',n:'Other / prefer not to say'}];
 const MIN_GROUP=3; // a role group is only shown when at least this many people are in it
 const JN=['Choose a pillar','Set the scene','Test and challenge','Reconsider your pillar','Conclusion'];
-const JMAP={lobby:[],ground:[1],scene:[2],internal:[3],external:[3],reselect:[4],check:[5],results:[5]};
+const JMAP={lobby:[],ground:[1],scene:[2],internal:[3],external:[3],reselect:[4],results:[5]};
 const DEF=`The Hospital AI roll-out | Faster diagnoses and shorter waits, versus missed rare cases and fewer frontline staff.
 The Green Data Centre Dilemma | Expand fast with a conventional data centre, or go sustainable at higher cost and a slower start.`;
-// minutes per stage (host timer). Introduction 7 · each scenario 18 = 2+4+11+1 · Compass check 1 · Conclusion / Debrief 5 · total 49
-const MINS={lobby:0,ground:7,scene:2,internal:4,external:11,reselect:1,check:1,results:5};
+// minutes per stage (host timer). Introduction 7 · each scenario 18 = 2+4+11+1 · Conclusion / Debrief 5 · total 48
+const MINS={lobby:0,ground:7,scene:2,internal:4,external:11,reselect:1,results:5};
 const STEPS=[{k:'lobby'},{k:'ground'}];
 [0,1].forEach(n=>STEPS.push({k:'scene',n},{k:'internal',n},{k:'external',n},{k:'reselect',n}));
-STEPS.push({k:'check'},{k:'results'});
+STEPS.push({k:'results'});
 const sha=async s=>[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))].map(b=>b.toString(16).padStart(2,'0')).join('');
 
 const host=location.hash==='#host';
 const pid=localStorage.pid||(localStorage.pid=Math.random().toString(36).slice(2,10));
 const openTp=new Set();
-const sent=new Map(); // pillar assignments the host has just written, so it never assigns the same person twice
 let S=null,code=null,players=[],points=[],me={},mineAll=[],loaded=false,tab=null,hide=false,timerEnd=0,lastStep=-1,plLoaded=false,ptLoaded=false,pubStep=-1,lockSent=-1;
 const cur=()=>STEPS[S.step];
 // Stages where people choose a pillar. When the host's timer hits 0:00 these lock for everyone.
-const LOCKABLE=['ground','reselect','check'];
+const LOCKABLE=['ground','scene','reselect'];
 const locked=()=>!!S&&S.lockedStep===S.step&&LOCKABLE.includes(cur().k);
 const lockNote=()=>locked()?'<p class="lockn">⏱ Time\'s up. Your response is locked in.</p>':'';
 // What the host writes when moving to another step: new step, a fresh shared deadline, and any old lock cleared
 const stepUpdate=ns=>{const m=MINS[STEPS[ns].k];return{step:ns,lockedStep:deleteField(),deadline:m?Date.now()+m*60000:deleteField()}};
 const cnt=(k,id)=>players.filter(x=>x[k]===id).length;
-const lab=s=>({lobby:'Introduction',ground:'Introduction',scene:`S${s.n+1} · Set the scene`,internal:`S${s.n+1} · Pillar huddle`,external:`S${s.n+1} · Cross-pillar exchange`,reselect:`S${s.n+1} · Reconsider`,check:'Compass check',results:'Conclusion / Debrief'})[s.k];
+const lab=s=>({lobby:'Introduction',ground:'Introduction',scene:`S${s.n+1} · Set the scene`,internal:`S${s.n+1} · Pillar huddle`,external:`S${s.n+1} · Cross-pillar exchange`,reselect:`S${s.n+1} · Reconsider`,results:'Conclusion / Debrief'})[s.k];
 
 function listen(c){
   code=c;loaded=false;
   onSnapshot(sref(c),d=>{S=d.exists()?d.data():null;loaded=true;draw()});
   if(host){
-    onSnapshot(collection(db,'sessions',c,'players'),q=>{players=q.docs.map(d=>({...d.data(),_id:d.id}));plLoaded=true;draw()});
+    onSnapshot(collection(db,'sessions',c,'players'),q=>{players=q.docs.map(d=>d.data());plLoaded=true;draw()});
     onSnapshot(collection(db,'sessions',c,'points'),q=>{points=q.docs.map(d=>d.data()).sort((a,b)=>a.at-b.at);ptLoaded=true;draw()});
   }else{
     localStorage.lastCode=c;
@@ -157,13 +156,12 @@ function drawPlayer(){
   const a=i!==null?me['a'+i]:null;
   if(st.k==='lobby')b+=`<h1>You're in ✓</h1><p>While we wait: what kind of work do you do? At the end we'll show how roles lean across the pillars, but only for groups of ${MIN_GROUP} or more.</p>${roleSelect()}<p>${me.role?'Thanks! ':''}Waiting for the facilitator to start…</p>`;
   if(st.k==='ground')b+=`<h2>Your ${T.g}</h2><p>No scenario yet. Off the top of your head, which pillar matters most to you? This is your baseline for the whole session.</p>${picker('g')}${lockNote()}${me.role?'':rolePrompt()}`;
-  if(st.k==='scene')b+=`<h2>${esc(sc.name)}</h2><p>${esc(sc.blurb)}</p>`+(a?`<div class="rb" style="${pstyle(pn(a))};margin:14px 0"><div class="rt">Your pillar for this scenario</div><div class="big">${pn(a).n}</div></div><p>You were assigned this pillar at random, whatever your own view. You might not agree with it, and that's the point: speak for it as well as you can, and find the others with your pillar.</p>`:'<p>Assigning your pillar…</p>');
+  if(st.k==='scene')b+=`<h2>${esc(sc.name)}</h2><p>${esc(sc.blurb)}</p><p><b>Which pillar did the facilitators assign you for this scenario?</b> Tap it below. You were assigned it whatever your own view, and that's the point: speak for it as well as you can, and find the others with your pillar.</p>${picker('a'+i)}${lockNote()}`;
   if(st.k==='internal'||st.k==='external'){
     const my=mineAll.filter(x=>x.s===i);
-    b+=`<h2>${esc(sc.name)}</h2>`+(a?`<p>${st.k==='internal'?'Huddle with the others assigned your pillar first.':'Now exchange views across the pillars.'} You're speaking for <b style="color:${pn(a).c}">${pn(a).n}</b>. Add the ${T.pt}s you raise, max 5 words each. There's no limit on how many.</p><input id="pt" placeholder="e.g. Saves lives, costs jobs" autocomplete="off"><button class="go" data-a="add">Add</button><p class="err" id="err"></p>${my.length?'<p class="jl">Shared so far</p>':''}<ul>${my.map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul>`:'<p>Assigning your pillar…</p>');
+    b+=`<h2>${esc(sc.name)}</h2>`+(a?`<p>${st.k==='internal'?'Huddle with the others assigned your pillar first.':'Now exchange views across the pillars.'} You're speaking for <b style="color:${pn(a).c}">${pn(a).n}</b>. Add the ${T.pt}s you raise, max 5 words each. There's no limit on how many.</p><input id="pt" placeholder="e.g. Saves lives, costs jobs" autocomplete="off"><button class="go" data-a="add">Add</button><p class="err" id="err"></p>${my.length?'<p class="jl">Shared so far</p>':''}<ul>${my.map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul>`:`<p><b>Which pillar were you assigned?</b> Tap it to start adding talking points.</p>${picker('a'+i)}`);
   }
   if(st.k==='reselect')b+=`<h2>${esc(sc.name)}</h2><p>You argued for <b style="color:${a?pn(a).c:'inherit'}">${a?pn(a).n:'—'}</b>. Now, as yourself: after the discussion, where do you stand? You don't have to vote for the pillar you argued.</p>${picker('r'+i)}${lockNote()}`;
-  if(st.k==='check')b+=`<h2>${T.c}</h2><p>One last time, with no scenario in mind: which pillar matters most to you? It's the same question as at the start.</p>${picker('c')}${lockNote()}`;
   if(st.k==='results')b+=`<h1>Thank you 🙌</h1><p>Your ${T.g}: <b style="color:${me.g?pn(me.g).c:'inherit'}">${me.g?pn(me.g).n:'—'}</b></p><p>Your stance may shift from one scenario to the next, depending on context. Your ${T.g} is what you carry with you.</p><p>Loading the room's results…</p>`;
   W(b);
 }
@@ -196,7 +194,7 @@ function buildResults(){
   const trend=k=>{const mt=players.filter(x=>x.g&&x[k]),n=mt.length,d={};P.forEach(p=>{const b=mt.filter(x=>x.g===p.id).length,v=mt.filter(x=>x[k]===p.id).length;d[p.id]=n?Math.round((v-b)/n*100):0});return{c:cp(k),d,n}};
   // for people assigned a pillar other than their Value Compass: did they adopt the pillar they argued, hold their compass, or move to the third?
   const lens=i=>{const ls=players.filter(x=>x.g&&x['a'+i]&&x['r'+i]&&x['a'+i]!==x.g);return{n:ls.length,adopt:ls.filter(x=>x['r'+i]===x['a'+i]).length,hold:ls.filter(x=>x['r'+i]===x.g).length,third:ls.filter(x=>x['r'+i]!==x['a'+i]&&x['r'+i]!==x.g).length}};
-  return{g:cp('g'),roles:roleLens(),trend:[trend('r0'),trend('r1'),trend('c')],chk:{m:mov('c')},
+  return{g:cp('g'),roles:roleLens(),trend:[trend('r0'),trend('r1')],
     sc:S.scenarios.map((s,i)=>({i,name:s.name,m:mov('r'+i),lens:lens(i),pts:Object.fromEntries(P.map(p=>[p.id,points.filter(x=>x.s===i&&x.p===p.id).map(x=>x.t)]))}))};
 }
 // One layout for both the big screen and the phones
@@ -212,7 +210,7 @@ function resultsHTML(R,withPts){
   const tn=R.trend||[];
   const trendSec=section(`${T.g}: the baseline`,`Arrows show the change in percentage points against the ${T.g}, counting only people who answered both.`,'',
     trow(T.g,R.g,P.map(p=>`<span style="color:${p.c}">${p.n} ${pc(R.g,p)}%</span>`).join(' · '))
-    +tn.map((t,k)=>trow(k<2?`After Scenario ${k+1}`:T.c,t.c,dl(t.d))).join(''));
+    +tn.map((t,k)=>trow(`After Scenario ${k+1}`,t.c,dl(t.d))).join(''));
   const segs=[['adopt','#B8A6FF','Adopted the pillar they argued'],['hold','#8EC9FF','Held their Value Compass'],['third','#C9C7E6','Moved to the third pillar']];
   const lensRow=l=>{
     if(!l||!l.n)return '';
@@ -221,10 +219,9 @@ function resultsHTML(R,withPts){
   const scs=R.sc.map((s,n)=>{
     const pts=withPts?`<details class="tp" data-tp="${n}" ${openTp.has(String(n))?'open':''}><summary>Talking points</summary>${P.map(p=>`<div class="tpp" style="color:${p.c}"><b>${p.n}</b><ul>${(s.pts[p.id]||[]).map(t=>`<li>${esc(t)}</li>`).join('')||'<li>—</li>'}</ul></div>`).join('')}</details>`:'';
     return section(`Scenario ${n+1} · ${esc(s.name)}`,`Starting from each person's ${T.g}: who stayed and who moved after the discussion.`,moveBoxes(s.m),lensRow(s.lens)+pts)}).join('');
-  const chkSec=R.chk?section(T.c,'The same question as at the start, with no scenario.',moveBoxes(R.chk.m),''):'';
   const rl=(R.roles&&R.roles.rows)||[];
   const roleSec=R.roles?`<div class="rs"><h3 class="rh">Role lens</h3>${rl.length?`<p class="rnote">${T.g} by role. Groups of fewer than ${MIN_GROUP} people are combined, so nobody can be picked out.</p>${barRow('Whole room ('+tot(R.g)+')',R.g)}${rl.map(r=>barRow(`${r.n} (${tot(r.c)})`,r.c)).join('')}<p class="rnote">Which pillar does your role pull you towards, and who in your world pulls the other way?</p>`:`<p class="rnote">Not enough people per role (minimum ${MIN_GROUP}) to show a breakdown for this room.</p>`}</div>`:'';
-  return `<div class="lg">${P.map(p=>`<span><i style="background:${p.c}"></i>${p.n}</span>`).join('')}</div>`+trendSec+scs+chkSec+roleSec;
+  return `<div class="lg">${P.map(p=>`<span><i style="background:${p.c}"></i>${p.n}</span>`).join('')}</div>`+trendSec+scs+roleSec;
 }
 function resultsText(){
   const R=S.results,link=location.origin+location.pathname+'?s='+code;
@@ -237,35 +234,15 @@ function resultsText(){
     const pts=P.map(p=>`  ${p.n}: ${(s.pts[p.id]||[]).join('; ')||'—'}`).join('\n');
     return `SCENARIO ${n+1} · ${s.name}\n${mine}How the room moved from its ${T.g}:\n${mv}\nTalking points:\n${pts}`;
   }).join('\n\n');
-  const trendTxt=`ROOM TREND\n  ${T.g}: ${pcs(R.g)}\n`+(R.trend||[]).map((t,k)=>`  ${k<2?'After Scenario '+(k+1):T.c}: ${pcs(t.c)}`).join('\n');
+  const trendTxt=`ROOM TREND\n  ${T.g}: ${pcs(R.g)}\n`+(R.trend||[]).map((t,k)=>`  After Scenario ${k+1}: ${pcs(t.c)}`).join('\n');
   const rl=(R.roles&&R.roles.rows)||[];
   const roleTxt=rl.length?`\n\nROLE LENS (${T.g} by role; groups under ${MIN_GROUP} are combined)\n`+rl.map(r=>`  ${r.n} (${tot(r.c)}): ${P.map(p=>`${p.n} ${r.c[p.id]||0}`).join(' · ')}`).join('\n'):'';
-  return `THE AI TRILEMMA · my results\nMy ${T.g}: ${me.g?pn(me.g).n:'—'}${me.c?`\nMy ${T.c}: ${pn(me.c).n}`:''}\n\n${trendTxt}\n\n${sc}${roleTxt}\n\nSee the full results again any time: ${link}`;
+  return `THE AI TRILEMMA · my results\nMy ${T.g}: ${me.g?pn(me.g).n:'—'}\n\n${trendTxt}\n\n${sc}${roleTxt}\n\nSee the full results again any time: ${link}`;
 }
 function maybePublish(){
   if(cur().k!=='results'){pubStep=-1;return}
   if(!plLoaded||!ptLoaded||pubStep===S.step)return;
   pubStep=S.step;updateDoc(sref(code),{results:buildResults()});
-}
-// Host: give every joined player a random pillar for each scenario, as evenly split as possible.
-// Late joiners are topped up into whichever pillar has the fewest people.
-function maybeAssign(){
-  if(!plLoaded)return;
-  STEPS.forEach((st,idx)=>{
-    if(st.k!=='scene'||S.step<idx)return;
-    const key='a'+st.n,have=x=>x[key]||sent.get(st.n+':'+x._id);
-    const todo=players.filter(x=>!have(x));
-    if(!todo.length)return;
-    const cn=Object.fromEntries(P.map(p=>[p.id,players.filter(x=>have(x)===p.id).length]));
-    for(let j=todo.length-1;j>0;j--){const k=Math.random()*(j+1)|0;[todo[j],todo[k]]=[todo[k],todo[j]]}
-    const wb=writeBatch(db);
-    todo.forEach(x=>{
-      const m=Math.min(...P.map(p=>cn[p.id])),opts=P.filter(p=>cn[p.id]===m),pk=opts[Math.random()*opts.length|0];
-      cn[pk.id]++;sent.set(st.n+':'+x._id,pk.id);
-      wb.set(doc(db,'sessions',code,'players',x._id),{[key]:pk.id},{merge:true});
-    });
-    wb.commit().catch(()=>todo.forEach(x=>sent.delete(st.n+':'+x._id)));
-  });
 }
 const box=(l,n,base)=>`<div class="sec"><small>${l}</small><div class="num">${n}${base!=null&&n!==base?`<span class="d">${n>base?'▲':'▼'}${Math.abs(n-base)}</span>`:''}</div></div>`;
 const hid=l=>`<div class="sec"><small>${l}</small><div class="num" style="opacity:.3">—</div></div>`;
@@ -279,21 +256,19 @@ function drawHost(){
   if(S.step!==lastStep){lastStep=S.step;tab=null;lockSent=-1}
   timerEnd=S.deadline||0;
   const c=cur();
-  maybePublish();maybeAssign();
-  const auto=({lobby:'g',ground:'g',check:'c',results:'r'})[c.k]||('s'+c.n),v=tab||auto;
-  const key={lobby:'role',ground:'g',scene:'a'+c.n,reselect:'r'+c.n,check:'c'}[c.k];
-  const ans=key?` · ${players.filter(x=>x[key]).length}/${players.length} ${c.k==='scene'?'assigned':'answered'}`:'';
-  const tabs=[['g',T.g],['s0','S1'],['s1','S2'],['c',T.c],['r','Results']];
+  maybePublish();
+  const auto=({lobby:'g',ground:'g',results:'r'})[c.k]||('s'+c.n),v=tab||auto;
+  const key={lobby:'role',ground:'g',scene:'a'+c.n,reselect:'r'+c.n}[c.k];
+  const ans=key?` · ${players.filter(x=>x[key]).length}/${players.length} ${c.k==='scene'?'picked a pillar':'answered'}`:'';
+  const tabs=[['g',T.g],['s0','S1'],['s1','S2'],['r','Results']];
   const idxOf=(k,n)=>STEPS.findIndex(x=>x.k===k&&(n===undefined||x.n===n));
   let body='';
   if(v==='r'){
     body=resultsHTML(buildResults(),true);
   }else{
     const showAfter=v[0]==='s'&&S.step>=idxOf('reselect',+v.slice(1));
-    const showChk=v==='c'&&S.step>=idxOf('check');
     const colsH=P.map(p=>{let top,mid='',bot='';const base=cnt('g',p.id);
       if(v==='g')top=box(T.g,base);
-      else if(v==='c'){top=box(T.g,base);bot=showChk?box(T.c,cnt('c',p.id),base):hid(T.c)}
       else{const i=+v.slice(1);top=box(T.as,cnt('a'+i,p.id));
         mid=`<ul>${points.filter(x=>x.s===i&&x.p===p.id).map(x=>`<li>${esc(x.t)}</li>`).join('')}</ul>`;
         bot=showAfter?box(`${T.a} · change vs ${T.g}`,cnt('r'+i,p.id),base):hid(T.a)}
@@ -356,7 +331,7 @@ app.addEventListener('click',async e=>{
     const[pd,xd]=await Promise.all([getDocs(collection(db,'sessions',code,'players')),getDocs(collection(db,'sessions',code,'points'))]);
     await Promise.all([...pd.docs,...xd.docs].map(d=>deleteDoc(d.ref)));
     await updateDoc(sref(code),{step:0,ended:false,results:deleteField(),lockedStep:deleteField(),deadline:deleteField()});
-    sent.clear();lockSent=-1;tab=null;
+    lockSent=-1;tab=null;
   }
   if(a==='extend'){lockSent=-1;updateDoc(sref(code),{deadline:Math.max(Date.now(),S.deadline||0)+60000,lockedStep:deleteField()})}
   if(a==='next'&&S.step<STEPS.length-1)updateDoc(sref(code),stepUpdate(S.step+1));
